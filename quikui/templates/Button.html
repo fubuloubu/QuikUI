@@ -1,0 +1,8 @@
+<button type="button" class="btn btn-primary" hx-{{ verb|lower }}="{{ route }}" hx-swap="outerHTML">
+{% if content|is_component %}
+  {# NOTE: `content` is safe because it has been pre-rendered #}
+  {{ content.model_dump_html()|safe }}
+{% else %}
+  {{ content }}
+{% endif %}
+</button>

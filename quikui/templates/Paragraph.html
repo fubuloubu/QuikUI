@@ -1,0 +1,8 @@
+<p class="my-3">
+{% if content|is_component %}
+  {# NOTE: `content` is safe because it has been pre-rendered #}
+  {{ content.model_dump_html()|safe }}
+{% else %}
+  {{ content }}
+{% endif %}
+</p>

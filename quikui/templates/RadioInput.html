@@ -1,0 +1,22 @@
+{% if label %}
+<label>
+{% if label|is_component %}
+  {{ label.model_dump_html()|safe }}
+{% else %}
+  {{ label }}
+{% endif %}
+</label>
+{% endif %}
+
+{% for option in options %}
+<input id="{{ option.value }}" name="{{ id }}" type="{{ type }}" value="{{ option.value }}">
+{% if option.label %}
+<label for="{{ option.value }}">
+{% if option.label|is_component %}
+  {{ option.label.model_dump_html()|safe }}
+{% else %}
+  {{ option.label }}
+{% endif %}
+</label>
+{% endif %}
+{% endfor %}

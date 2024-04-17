@@ -1,0 +1,14 @@
+{% extends "FormInput.html" %}
+{% block input %}
+<select {% if id %}id="{{ id }}" name="{{ id }}"{% endif %} {% if required %}required{% endif %}>
+{% for option in options %}
+  <option value="{{ option.value }}" {% if option.value == selected %}selected{% endif %} {% if option.value in disabled %}disabled{% endif %}>
+  {% if option.label|is_component %}
+    {{ option.label.model_dump_html()|safe }}
+  {% else %}
+    {{ option.label }}
+  {% endif %}
+  </option>
+{% endfor %}
+</select>
+{% endblock %}

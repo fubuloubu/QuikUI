@@ -1,0 +1,12 @@
+<ul class="list-group">
+{% for item in items %}
+  <li class="list-group-item">
+  {% if item|is_component %}
+    {# NOTE: `item` is safe because it has been pre-rendered #}
+    {{ item.model_dump_html()|safe }}
+  {% else %}
+    {{ item }}
+  {% endif %}
+  </li>
+{% endfor %}
+</ul>

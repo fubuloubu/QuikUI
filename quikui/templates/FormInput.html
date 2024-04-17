@@ -1,0 +1,15 @@
+{% if label %}
+<label {% if id %}for="{{ id }}"{% endif %}>
+{% if label|is_component %}
+  {{ label.model_dump_html()|safe }}
+{% else %}
+  {{ label }}
+{% endif %}
+</label>
+{% if add_break %}
+<br>
+{% endif %}
+{% endif %}
+{% block input %}
+<input {% if id %}id="{{ id }}" name="{{ id }}"{% endif %} type="{{ type }}" {% if required %}required{% endif %}>
+{% endblock %}

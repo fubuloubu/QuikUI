@@ -1,0 +1,59 @@
+[build-system]
+requires = [
+  "setuptools>=60",
+  "setuptools_scm>=8",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "QuikUI"
+description = "Build UIs quickly with Jinga2, FastAPI, Pydantic, htmx, and a little bit of magic"
+# NOTE: Do NOT specify `version = ...` here, otherwise setuptools_scm won't work
+dynamic = ["version"]
+authors = [
+  {name = "ApeWorX LTD.", email = "admin@apeworx.io"},
+]
+readme = "README.md"
+requires-python = ">=3.10,<4"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  "fastapi[all]>=0.110,<1",
+  "Jinja2>=3.0,<4",
+  "pydantic>=2.6,<3",
+]
+
+[project.optional-dependencies]
+lint = [
+  "black",
+]
+test = [
+  "pytest",
+]
+release = [
+  "setuptools_scm",
+  "wheel",
+]
+dev = [
+  "IPython",
+  # NOTE: Must be PEP508, this ensures that `.[dev]` also installs the other extras too
+  "quikui[lint,test,release]",
+]
+
+[tool.setuptools]
+packages = [ "quikui" ]
+
+[tool.setuptools.package-data]
+templates = ['templates/*']
+
+[tool.setuptools_scm]
+# NOTE: Required to ensure that setuptools_scm functions properly
+
+[tool.ruff]
+line-length = 100

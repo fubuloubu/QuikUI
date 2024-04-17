@@ -1,0 +1,11 @@
+{% extends 'AppBase.html' %}
+{% block header %}
+<title>{{ title }}</title>
+{% endblock header %}
+
+{% block content %}
+  {% for item in content %}
+    {# NOTE: `item` is safe because it has been pre-rendered #}
+    {{ item.model_dump_html()|safe }}
+  {% endfor %}
+{% endblock content %}

@@ -1,0 +1,5 @@
+<form {% if id %}id="{{ id }}"{% endif %} hx-{{ verb }}="{{ route }}">
+{% for item in items %}
+  {{ item.model_dump_html()|safe }}
+{% endfor %}
+</form>

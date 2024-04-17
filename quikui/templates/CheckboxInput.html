@@ -1,0 +1,10 @@
+<input id="{{ id }}" name="{{ id }}" type="{{ type }}">
+{% if label %}
+<label for="{{ id }}">
+{% if label|is_component %}
+  {{ label.model_dump_html()|safe }}
+{% else %}
+  {{ label }}
+{% endif %}
+</label>
+{% endif %}

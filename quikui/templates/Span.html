@@ -1,0 +1,10 @@
+<span class="span-group">
+{% for item in items %}
+  {% if item|is_component %}
+    {# NOTE: `item` is safe because it has been pre-rendered #}
+    {{ item.model_dump_html()|safe }}
+  {% else %}
+    {{ item }}
+  {% endif %}
+{% endfor %}
+</span>
