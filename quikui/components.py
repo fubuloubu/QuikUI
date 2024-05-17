@@ -55,8 +55,8 @@ class BaseComponent(BaseModel):
             " a component with a valid template."
         )
 
-    def model_dump_html(self) -> str:
-        model_dict = dict((f, getattr(self, f)) for f in self.model_fields)
+    def model_dump_html(self, *args, **kwargs) -> str:
+        model_dict = self.model_dump(*args, **kwargs)
         return self.template.render(**model_dict)
 
 
