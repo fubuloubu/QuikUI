@@ -169,7 +169,10 @@ class BaseComponent(BaseModel):
 
         if attrs is None:
             attrs = dict()
-        attrs.update(self.__pydantic_extra__)
+
+        if self.__pydantic_extra__:
+            attrs.update(self.__pydantic_extra__)
+
         self._attrs_ = Attributes(attrs)
         self.__pydantic_extra__ = {}
 
