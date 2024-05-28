@@ -26,7 +26,8 @@ async def index():
                     qc.Heading(content="Basic Component Demo"),
                     qc.Paragraph(content="This is a paragraph element."),
                     qc.Div(
-                        css={"my-3"},  # Can add custom CSS classes to any component
+                        # Can add custom CSS classes to any component via `css=...`
+                        css="my-3",
                         items=[
                             qc.Paragraph(content="This is a paragraph inside a div."),
                             qc.Paragraph(
@@ -39,7 +40,8 @@ async def index():
                                         qc.Anchor(
                                             content="with a link",
                                             route="https://google.com",
-                                            attrs=dict(target="_blank"),
+                                            # You can add extra html attributes via kwargs
+                                            target="_blank",  # NOTE: Open link in a new tab
                                         ),
                                         " to something inside that same div.",
                                     ]
@@ -48,15 +50,12 @@ async def index():
                         ],
                     ),
                     qc.Paragraph(
-                        # can also add extra attributes
-                        attrs=dict(something="blah"),
                         content=qc.Span(
                             items=[
                                 "This is another span ",
                                 qc.Anchor(
                                     content="with a link",
                                     route="/another-page",
-                                    # NOTE: `.target` defaults to same page
                                 ),
                                 " to another page, outside the div.",
                             ]
@@ -82,6 +81,8 @@ def another_page():
                 )
             ),
             qc.Button(
+                # can also add extra attributes via `attrs=dict(...)` kwarg
+                # NOTE: This is useful for when attrs have `-` in them, or are protected keywords
                 attrs={"hx-get": "/dynamic", "type": "button", "hx-swap": "outerHTML"},
                 content="Get Dynamic Content",
             ),
@@ -93,6 +94,7 @@ def another_page():
     )
 
 
+# NOTE: The components used do not have to be so fine-grained,
 class CustomComponent(qc.BaseComponent):
     """To make a renderable component, just subclass this..."""
 
@@ -100,8 +102,8 @@ class CustomComponent(qc.BaseComponent):
 
     def model_dump_html(self) -> str:
         """...and implement this method"""
-        # NOTE: You do not have to subclass a component from the library,
-        #       simply use whatever components you'd like to use to render
+        # NOTE: You do not have to subclass a component from the library, simply use whatever
+        #       components or templates you'd like to use to render your models
         return qc.Paragraph(content=self.text).model_dump_html()
 
     # NOTE: If you override `html_template_package` class variable with your own
@@ -111,7 +113,7 @@ class CustomComponent(qc.BaseComponent):
 
 
 @app.get("/dynamic")
-@qc.render_component()  # NOTE: Allowed both w/ html and json response modes
+@qc.render_component()  # NOTE: Allowed both w/ html and json response modes when `html_only=False`
 def dynamic_content():
     return CustomComponent()
 
@@ -170,6 +172,9 @@ async def receive_form(form: CustomForm = Depends(qc.form_handler(CustomForm))):
         items=[
             qc.Paragraph(content="Form Data:"),
             qc.UnorderedList(
+                # NOTE: You can give each item a uniform set of css/extra attrs via this:
+                item_css={"my-5"},
+                item_attributes=dict(something="else"),
                 items=[
                     qc.Paragraph(content=f"{field}: {value}")
                     for field, value in form.model_dump().items()
