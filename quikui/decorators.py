@@ -1,6 +1,16 @@
 from functools import wraps, partial
 import inspect
-from typing import Annotated, Any, ClassVar, Callable, Coroutine
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Callable,
+    Coroutine,
+    get_args,
+    GenericAlias,
+    _GenericAlias,
+    types,
+)
 from fastapi import (
     HTTPException,
     Depends,
@@ -9,11 +19,12 @@ from fastapi import (
     status,
     Response,
 )
+from fastapi.dependencies.utils import get_typed_return_annotation
 from fastapi.responses import HTMLResponse
 
-from .components import BaseComponent, Page
+from .components import BaseComponent
 from .utils import (
-    DependsHXRequest,
+    DependsHtmlResponse,
     append_to_signature,
     execute_maybe_sync_func,
     MaybeAsyncFunc,
@@ -25,87 +36,114 @@ from .utils import (
 
 def render_component(
     html_only: bool = False,
-    is_page: bool = False,
+    # render_model: BaseComponent | None = None,
 ) -> Callable[[MaybeAsyncFunc[P, T]], Callable[P, Coroutine[None, None, T | Response]]]:
+    """
+    A decorator that should be used to automatically render an instance or sequence of
+    :class:`~quikui.BaseComponent` subclass(es) into an :class:`~fastapi.responses.HTMLResponse`
+    to respond to an incoming request that expects an HTML response.
+
+    Args:
+        html_only (bool):
+            Whether this route should only accept Requests that expect an HTML response.
+
+    Raises:
+        :class:`~fastapi.HTTPException`:
+            A 406 error if ``html_only`` is ``True`` and did not detect an HTML expected response.
+        ValueError: If the result of executing the function is not an instance of str,
+            :class:`~quikui.BaseComponent`, or Iterable[:class:`~fastapi.BaseComponent`].
+
+    Usage example::
+
+        >>> import quikui as qk
+        >>>
+        >>> app = FastAPI()
+        >>>
+        >>>
+        >>> @app.get("/path")
+        >>> @qk.render_component()
+        >>> def get_something():
+        >>>     return instance_of_basecomponent_subclass  # Automatically converted to html
+
+
+    ```note
+    Errors are only raised when the decorated function is called. Any unexpected error will
+    generate a 500 Server Error in your FastAPI app.
+    ```
+    """
 
     def decorator(
         func: MaybeAsyncFunc[P, T],
     ) -> Callable[P, Coroutine[None, None, T | Response]]:
 
-        if is_page:
-
-            @wraps(func)
-            async def wrapper_render_page(
-                *args: P.args,
-                __page_request: Request,
-                **kwargs: P.kwargs,
-            ) -> T | Response:
-                result = await execute_maybe_sync_func(func, *args, **kwargs)
-                if isinstance(result, Response):
-                    return result
-
-                elif __page_request is None:  # or not isinstance(result, Page):
-                    raise HTTPException(
-                        status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        "This component must be rendered from a page request.",
-                    )
-
-                response = get_response(kwargs)
-                return HTMLResponse(
-                    result.model_dump_html(),
-                    headers=None if response is None else response.headers,
+        @wraps(func)
+        async def wrapper_render_if_html_requested(
+            *args: P.args,
+            __html_response_requested: DependsHtmlResponse,
+            **kwargs: P.kwargs,
+        ) -> T | Response:
+            if html_only and __html_response_requested is None:
+                raise HTTPException(
+                    status.HTTP_406_NOT_ACCEPTABLE,
+                    "This route can only provide HTML responses. Please set Accept headers.",
                 )
 
-            return append_to_signature(
-                wrapper_render_page,
-                inspect.Parameter(
-                    "__page_request",
-                    inspect.Parameter.KEYWORD_ONLY,
-                    annotation=Request,
-                ),
-            )
+            result = await execute_maybe_sync_func(func, *args, **kwargs)
+            if __html_response_requested is None or isinstance(result, Response):
+                return result
 
-        else:
+            if (render_model := get_typed_return_annotation(func)) and isinstance(
+                render_model, (GenericAlias, _GenericAlias, types.UnionType)
+            ):
+                # List[...] or list[...] or Tuple[...] or tuple[...]
+                render_model = get_args(render_model)[0]
+                # NOTE: `get_args() returns either (Class,) or (Class, None)
 
-            @wraps(func)
-            async def wrapper_render_if_htmx(
-                *args: P.args,
-                __hx_request: DependsHXRequest,
-                **kwargs: P.kwargs,
-            ) -> T | Response:
-                if html_only and __hx_request is None:
-                    raise HTTPException(
-                        status.HTTP_400_BAD_REQUEST,
-                        "This route can only process HTMX requests.",
-                    )
+            # else: `render_model` is None, which is okay
 
-                result = await execute_maybe_sync_func(func, *args, **kwargs)
-                if __hx_request is None or isinstance(result, Response):
-                    return result
-
-                elif isinstance(result, BaseComponent):
-                    result = result.model_dump_html()
-
-                elif not isinstance(result, str):
-                    # NOTE: Should not happen if library is used properly
-                    raise HTTPException(
-                        status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        "Function does not render properly.",
-                    )
-
-                response = get_response(kwargs)
-                return HTMLResponse(
-                    result,
-                    headers=None if response is None else response.headers,
+            if isinstance(result, BaseComponent):
+                result = (
+                    render_model.template.render(**result.model_dump())
+                    if render_model is not None
+                    else result.model_dump_html()
                 )
 
-            return append_to_signature(
-                wrapper_render_if_htmx,
-                inspect.Parameter(
-                    "__hx_request",
-                    inspect.Parameter.KEYWORD_ONLY,
-                    annotation=DependsHXRequest,
-                ),
-            )
+            elif isinstance(result, (tuple, list)) and all(
+                isinstance(r, BaseComponent) for r in result
+            ):
+                result = "".join(
+                    (
+                        render_model.template.render(**r.model_dump())
+                        if render_model is not None
+                        else r.model_dump_html()
+                    )
+                    for r in result
+                )
+
+            elif not isinstance(result, str):
+                # NOTE: Should not happen if library is used properly, will raise 500 server exception
+                raise ValueError(
+                    "Result must either be an HTML string,"
+                    "an instance of a BaseComponent subclass, "
+                    "or an iterable of BaseComponent subclasses."
+                )
+
+            # else: `result` is str, assume it is HTML
+
+            if response := get_response(kwargs):
+                return HTMLResponse(result, headers=response.headers)
+
+            else:
+                return HTMLResponse(result)
+
+        # NOTE: Ensure our html response detection dependency is included
+        return append_to_signature(
+            wrapper_render_if_html_requested,
+            inspect.Parameter(
+                "__html_response_requested",
+                inspect.Parameter.KEYWORD_ONLY,
+                annotation=DependsHtmlResponse,
+            ),
+        )
 
     return decorator
