@@ -21,7 +21,7 @@ def form_handler(Model: Type["FormModel"]):
             return Model.model_validate(model_data)
         except ValidationError as e:
             raise RequestValidationError(
-                e.errors(include_input=False, include_url=False, include_context=False)
+                e.errors(include_input=True, include_url=True, include_context=True)
             )
 
     return handle_request

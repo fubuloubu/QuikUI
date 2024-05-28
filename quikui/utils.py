@@ -15,17 +15,32 @@ T = TypeVar("T")
 MaybeAsyncFunc = Callable[P, T] | Callable[P, Coroutine[Any, Any, T]]
 
 
-def get_hx_request(
-    request: Request, hx_request: Annotated[str | None, Header()] = None
+def html_response_requested(
+    request: Request,
+    hx_request: Annotated[bool, Header()] = False,
+    content_type: Annotated[str | None, Header()] = None,
+    raw_accept_header: Annotated[str | None, Header(alias="accept")] = None,
 ) -> Request | None:
-    """
-    FastAPI dependency that returns the current request if it is an HTMX one,
-    i.e. it contains an `"HX-Request: true"` header.
-    """
-    return request if hx_request == "true" else None
+    if hx_request:
+        # We definitely know that HX-Request=true headers means return html
+        return request
+
+    elif content_type and content_type == "application/json":
+        # Assume that if the request is JSON, the response should be too
+        # NOTE: htmx never does this
+        return None
+
+    elif raw_accept_header and (
+        accepted_types := list(t.strip() for t in raw_accept_header.split(","))
+    ):
+        if any(t.startswith("text/html") for t in accepted_types):
+            return request  # We have determined this is expecting HTML back
+
+    # else: We haven't determined (according to above heuristics) that HTML is requested
+    return None
 
 
-DependsHXRequest = Annotated[Request | None, Depends(get_hx_request)]
+DependsHtmlResponse = Annotated[Request | None, Depends(html_response_requested)]
 
 
 def append_to_signature(func: Callable, *params: inspect.Parameter) -> Callable:
