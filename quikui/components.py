@@ -10,6 +10,7 @@ from typing import (
     Iterator,
     Dict,
     Set,
+    Iterable,
 )
 from collections.abc import Container
 from itertools import chain
@@ -26,6 +27,8 @@ from pydantic import (
     model_serializer,
     field_validator,
     RootModel,
+    PrivateAttr,
+    ConfigDict,
 )
 from pydantic.fields import FieldInfo
 from pydantic import ValidationError
@@ -52,6 +55,20 @@ class CssClasses(RootModel):
     def __bool__(self) -> bool:
         return bool(self.root)
 
+    @model_validator(mode="before")
+    @classmethod
+    def convert_to_set(cls, val):
+        if not val:
+            return set()
+
+        elif isinstance(val, str):
+            return set(val.split(" "))
+
+        elif isinstance(val, list):
+            return set(val)
+
+        return val
+
     @model_validator(mode="after")
     def validate_markup_safe(self):
         assert all(
@@ -70,6 +87,9 @@ class Attributes(RootModel):
     def __getitem__(self, key):
         return self.root.__getitem__(key)
 
+    def get(self, key):
+        return self.root.get(key)
+
     def __setitem__(self, key, val):
         return self.root.__setitem__(key, val)
 
@@ -84,7 +104,6 @@ class Attributes(RootModel):
 
     @model_validator(mode="after")
     def validate_markup_safe(self):
-        assert "class" not in self.root, "Can't set `class` via attributes"
         assert all(
             set(key).issubset(VALID_ATTR_CHARS) for key in self.root
         ), "Not in spec"
@@ -112,6 +131,10 @@ class BaseComponent(BaseModel):
     take great care to properly handle user-generated content by "escaping" (making it safe).
 
     https://htmx.org/essays/web-security-basics-with-htmx/#always-use-an-auto-escaping-template-engine
+    ```warning
+    Cannot use this model if you rely on special behavior with `ConfigDict(extras="allow")`, as this
+    component overwrites the value of `__pydantic_extra__`
+    ```
     """
 
     html_template_package: ClassVar[str] = "quikui"
@@ -123,12 +146,32 @@ class BaseComponent(BaseModel):
     __quikui_component_name__: ClassVar[str | None] = None
     """To override the value of ``__component_name__`` when rendering the component."""
 
-    css: CssClasses = Field(default_factory=CssClasses, exclude=True)
+    _css_: CssClasses = PrivateAttr(default_factory=CssClasses)
     """Add extra CSS classes to this component. Useful for integration with your design system."""
 
-    attrs: Attributes = Field(default_factory=Attributes, exclude=True)
+    _attrs_: Attributes = PrivateAttr(default_factory=Attributes)
     """Add extra attributes to this component. Exposed to template rendering as
     ``__extra_attrs__``."""
+
+    # NOTE: Needed to fetch extra kwargs to models (will be discarded in `__init__`)
+    __pydantic_extra__: Dict[str, str | bool]
+    model_config = ConfigDict(extra="allow")
+
+    def __init__(
+        self,
+        css: Iterable[str] = None,
+        attrs: Dict[str, str | bool] = None,
+        **model_fields,
+    ):
+        super().__init__(**model_fields)
+
+        self._css_ = CssClasses(css)
+
+        if attrs is None:
+            attrs = dict()
+        attrs.update(self.__pydantic_extra__)
+        self._attrs_ = Attributes(attrs)
+        self.__pydantic_extra__ = {}
 
     @classmethod
     @property
@@ -208,13 +251,14 @@ class BaseComponent(BaseModel):
             # NOTE: Ensure we get all public, computed, and any requested private fields...
             for f in chain(self.model_fields, self.model_computed_fields, include)
             #       ...but also allow skipping fields we don't need for template context.
-            if f not in exclude and f not in ("css", "attrs")
+            if f not in exclude
         )
 
-        attrs = self.attrs.copy()
+        attrs = self._attrs_.copy()
 
-        if self.css:
-            attrs["class"] = self.css.model_dump()
+        if self._css_:
+            # NOTE: Not possible to set `class=...` in `Model(...)`, so this is fine
+            self._attrs_["class"] = self._css_.model_dump()
 
         if attrs:
             model_dict["__extra_attrs__"] = attrs.model_dump()
@@ -256,10 +300,9 @@ class Break(BaseComponent):
         return "<br>"
 
 
-class Anchor(BaseComponent):
+class Anchor(_SingleContentComponent):
     __quikui_component_name__ = "a"
     route: str
-    content: str | BaseComponent
 
 
 class Button(_SingleContentComponent):
@@ -316,8 +359,8 @@ class _ListComponent(_MultiItemComponent):
     @model_validator(mode="after")
     def add_item_css_and_attributes(self):
         for item in self.items:
-            item.css.update(self.item_css)
-            item.attrs.update(self.item_attributes)
+            item._css_.update(self.item_css)
+            item._attr_.update(self.item_attributes)
         return self
 
     @model_serializer()
@@ -373,11 +416,11 @@ class FormInput(BaseComponent):
 
     @model_validator(mode="after")
     def add_id_to_label(self):
-        if not (id := self.attrs.root.get("id")):
-            id = self.attrs.root["id"] = self.name
+        if not (id := self._attrs_.get("id")):
+            id = self._attrs_["id"] = self.name
 
         if self.label:
-            self.label.attrs.root["for"] = id
+            self.label._attrs_["for"] = id
 
         return self
 
@@ -528,7 +571,7 @@ class FormModel(BaseModel):
             attrs.update(form_attrs)
 
         return Form(
-            css=css or [],
+            css=css,
             attrs=attrs,
             items=list(cls.create_form_items(add_reset=add_reset)),
         )
