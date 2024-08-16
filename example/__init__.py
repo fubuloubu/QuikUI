@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Form, Depends
 from enum import Enum
 import quikui as qk
 from pydantic import BaseModel, Field
+import random
 
 
 app = FastAPI()
@@ -103,7 +104,10 @@ class CustomComponent(qk.BaseComponent):
 @app.get("/dynamic")
 @qk.render_component()  # NOTE: Allows both w/ html and json response modes when `html_only=False`
 def dynamic_content():
-    return CustomComponent()
+    return [
+        CustomComponent(text=random.choice(["Select", "Dynamic", "Content"]))
+        for _ in range(random.randint(1, 10))
+    ]
 
 
 class CarTypes(Enum):
