@@ -118,6 +118,7 @@ class Attributes(RootModel):
             " ".join(
                 (f'{k}="{v}"' if not isinstance(v, bool) else k)
                 for k, v in self.root.items()
+                # NOTE: Don't render non-"truthy" values e.g. `something=false`
                 if v  # Relies on truthiness to render bools and strings correctly
             )
         )
@@ -126,22 +127,29 @@ class Attributes(RootModel):
 class BaseComponent(BaseModel):
     """
     A subclass of `pydantic.BaseModel` that supports serialization to "safe" HTML. Serialization
-    to HTML is either done by parsing a Jinja2 template (distributed with the package), or by
-    explicitly overriding the `model_dump_html` function in a subclass. It is assumed that you
-    take great care to properly handle user-generated content by "escaping" (making it safe).
+    to HTML is either done by parsing a Jinja2 template (distributed with an associated package),
+    or by explicitly overriding the `model_dump_html` function in a subclass. It is assumed that
+    you take great care to properly handle user-generated content by "escaping" (making it safe).
 
+    ```{warning}
+    The way this library is designed does its best to maintain the property of always auto-escaping
+    user-driven content. However, it is possible to configure your own components using this
+    library to ignore that invariant. Either way, as a developer it is your job to ensure safety of
+    the environment you are creating in your user's browser. For more information, check out:
     https://htmx.org/essays/web-security-basics-with-htmx/#always-use-an-auto-escaping-template-engine
-    ```warning
+    ```
+
+    ```{note}
     Cannot use this model if you rely on special behavior with `ConfigDict(extras="allow")`, as this
-    component overwrites the value of `__pydantic_extra__`
+    component overwrites the value of `__pydantic_extra__` with custom behavior for additonal attrs.
     ```
     """
 
     html_template_package: ClassVar[str] = "quikui"
     """The package that should be used to search for templates for components that do not
     override `model_dump_html`. If you want to define custom components using your own templates,
-    override this in your base class to your package name. It is assumed the templates are stored
-    in a `./templates` package resource folder. Defaults to this package."""
+    override this in your base class and provide your package's name. Templates are stored in the
+    `./{quikui_template_package_path}` directory as a package resource. Defaults to this package."""
 
     __quikui_component_name__: ClassVar[str | None] = None
     """To override the value of ``__component_name__`` when rendering the component."""
@@ -183,14 +191,19 @@ class BaseComponent(BaseModel):
         """
         The environment to search for templates for this class and all it's subclasses.
 
-        ```note
-        This property is cached.
+        Returns:
+            :class:`~jinja2.Environment`:
+                The environment to search for template(s) to render this class with.
+
+        ```{note}
+        This method is cached since environments will typically not change during runtime.
         ```
         """
         env = Environment(
             loader=PackageLoader(cls.html_template_package),
             autoescape=True,
         )
+        # NOTE: Add our special filters here
         env.filters.update({"is_component": is_component})
         return env
 
@@ -199,6 +212,13 @@ class BaseComponent(BaseModel):
     def template(cls) -> Template:
         """
         The template that should be used to render this model.
+
+        Returns:
+            :class:`~jinja2.Template`: The template to render this model with.
+
+        ```{note}
+        This method is not cached so updates to templates do not require reloading.
+        ```
         """
         template_class = cls
         while issubclass(template_class, BaseComponent):
@@ -220,24 +240,30 @@ class BaseComponent(BaseModel):
         self,
         include: Container | None = None,
         exclude: Container | None = None,
+        template_type: str | None = None,
         **kwargs: dict,
     ) -> str:
         """
-        Serialize this model to "safe" HTML. This default implementation assumes that a template
-        exists for this model in `Class.env` that can be used to serialize this model by it's top-
-        level fields, including computed fields and any other fields that should be included.
+        Render this model to "safe" HTML. This default implementation assumes that a template
+        exists for this model in `Class.quikui_environment` that can be used to serialize this
+        model by it's top-level fields, including computed fields and any other fields that should
+        be included.
 
         Args:
 
             include: Fields to include that would otherwise be skipped.
-            exclude: Fields that shold be skipped which would otherwise be included.
-            **kwargs: Any other modifiers you need to pass to serialization.
+            exclude: Fields that should be skipped which would otherwise be included.
+            **kwargs: Any other attributes you want to pass directly to Jinja2 template rendering.
 
-        ```note
+        Returns:
+            (str): The rendered "safe" HTML that FastAPI will insert directly into a Response for
+                this model.
+
+        ```{note}
         You can override this if you can directly return "safe" html without using a template.
         ```
 
-        ```warning
+        ```{warning}
         This only gets the top-level current values, any recursion will be done via templating to
         ensure Markup safety context is bubbled up correctly. So, we do not pass down the further
         recursive context from `include` or `exclude` kwargs.
@@ -250,6 +276,7 @@ class BaseComponent(BaseModel):
             exclude = set()
 
         model_dict = dict(
+            # NOTE: Ensure properties are in original form, not serialized
             (f, getattr(self, f))
             # NOTE: Ensure we get all public, computed, and any requested private fields...
             for f in chain(self.model_fields, self.model_computed_fields, include)
@@ -277,7 +304,11 @@ class BaseComponent(BaseModel):
         Serialize this model to "safe" HTML, using default settings for field include/exclude.
         This should not be overriden, except to modify how `model_dump_html` gets called by Jinja2.
 
-        ```note
+        Returns:
+            (str): The rendered "safe" HTML that FastAPI will insert directly into a Response for
+                this model when using :func:`quikui.render_component`.
+
+        ```{note}
         This allows `BaseComponent` models to automatically serialize themselves as HTML when used
         in a Jinga2 template. We can include private fields for the template engine this way.
         ```
