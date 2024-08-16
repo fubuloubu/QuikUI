@@ -9,7 +9,7 @@ app = FastAPI()
 
 
 class CustomPage(qk.BaseComponent):
-    html_template_package = "example"
+    quikui_template_package_name = "example"
 
     title: str
     content: list[qk.BaseComponent]
@@ -96,7 +96,7 @@ class CustomComponent(qk.BaseComponent):
         #       components or templates you'd like to use to render your models
         return qc.Paragraph(content=self.text).model_dump_html()
 
-    # NOTE: If you override `html_template_package` class variable with your own
+    # NOTE: If you override `quikui_template_package_name` class variable with your own
     #       package or app, and that contains a `/templates` folder that has a template
     #       with the name of this class and the `.html` extension, then it will "auto-render"
 

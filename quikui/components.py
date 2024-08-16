@@ -145,11 +145,15 @@ class BaseComponent(BaseModel):
     ```
     """
 
-    html_template_package: ClassVar[str] = "quikui"
+    quikui_template_package_name: ClassVar[str] = "quikui"
     """The package that should be used to search for templates for components that do not
     override `model_dump_html`. If you want to define custom components using your own templates,
     override this in your base class and provide your package's name. Templates are stored in the
     `./{quikui_template_package_path}` directory as a package resource. Defaults to this package."""
+
+    quikui_template_package_path: ClassVar[str] = "templates"
+    """The directory inside this package that should be used to search for model templates to
+    render. Defaults to `./templates`. Must be a package resource bundled with the package."""
 
     __quikui_component_name__: ClassVar[str | None] = None
     """To override the value of ``__component_name__`` when rendering the component."""
@@ -200,7 +204,10 @@ class BaseComponent(BaseModel):
         ```
         """
         env = Environment(
-            loader=PackageLoader(cls.html_template_package),
+            loader=PackageLoader(
+                package_name=cls.quikui_template_package_name,
+                package_path=cls.quikui_template_package_path,
+            ),
             autoescape=True,
         )
         # NOTE: Add our special filters here
