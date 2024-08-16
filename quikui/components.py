@@ -190,7 +190,7 @@ class BaseComponent(BaseModel):
 
     @classmethod
     @cache
-    def env(cls) -> Environment:
+    def quikui_environment(cls) -> Environment:
         """
         The environment to search for templates for this class and all it's subclasses.
 
@@ -214,7 +214,7 @@ class BaseComponent(BaseModel):
         return env
 
     @classmethod
-    def template(cls) -> Template:
+    def quikui_template(cls, template_type: str | None = None) -> Template:
         """
         The template that should be used to render this model.
 
@@ -302,7 +302,7 @@ class BaseComponent(BaseModel):
             self.__quikui_component_name__ or self.__class__.__name__
         )
 
-        return self.template.render(**model_dict)
+        return self.quikui_template().render(**model_dict)
 
     def __html__(self) -> str:
         """
