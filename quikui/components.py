@@ -19,7 +19,12 @@ from enum import Enum
 import inspect
 
 from markupsafe import Markup
-from jinja2 import Environment, PackageLoader, TemplateNotFound, Template
+from jinja2 import (
+    Environment,
+    PackageLoader,
+    TemplateNotFound as Jinja2TemplateNotFound,
+    Template,
+)
 from pydantic import (
     BaseModel,
     Field,
@@ -34,6 +39,8 @@ from pydantic.fields import FieldInfo
 from pydantic import ValidationError
 
 from fastapi.exceptions import RequestValidationError
+
+from .exceptions import NoTemplateFound
 
 # NOTE: https://html.spec.whatwg.org/multipage/syntax.html#attributes-2
 VALID_ATTR_CHARS = set(string.printable) - set(""" "'`<>/=""")
@@ -221,6 +228,9 @@ class BaseComponent(BaseModel):
         Returns:
             :class:`~jinja2.Template`: The template to render this model with.
 
+        Raises:
+            :class:`~quikui.NoTemplateFound`: If no template was found while recursing.
+
         ```{note}
         This method is not cached so updates to templates do not require reloading.
         ```
@@ -234,14 +244,13 @@ class BaseComponent(BaseModel):
                     f"{template_class.__name__}.html"
                 )
 
-            except TemplateNotFound:
-                # NOTE: Potentially dangerous if multi-class heirarchy exists, only uses first
+            except Jinja2TemplateNotFound:
+                # If no template is found, recurse up the class heirarchy through `.__base__`
+                # NOTE: Potentially dangerous if multi-class heirarchy exists, only uses first base
                 template_class = template_class.__base__
 
-        # NOTE: If we get to this class, there was some error in user's subclassing system
-        raise ValueError(
-            f"Component '{cls.__name__}' does not subclass a component with a valid template."
-        )
+        # NOTE: If we get to BaseComponent, there was some error in user's environment
+        raise NoTemplateFound(cls, template_type)
 
     def model_dump_html(
         self,

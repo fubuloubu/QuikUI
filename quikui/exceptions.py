@@ -6,6 +6,19 @@ class BaseException(Exception):
     pass
 
 
+class NoTemplateFound(BaseException, RuntimeError):
+    def __init__(self, cls: Type, template_type: str | None):
+        if template_type:
+            template_name = f"{cls.__name__}.{template_type}.html"
+        else:
+            template_name = f"{cls.__name__}.html"
+
+        super().__init__(
+            f"Component '{cls.__name__}' does not contain an environment with a template "
+            f"named '{template_name}' in it, or subclass another component that can render itself."
+        )
+
+
 class HtmlResponseOnly(BaseException, HTTPException):
     def __init__(self):
         super().__init__(
@@ -29,5 +42,6 @@ class ResponseNotRenderable(BaseException, HTTPException):
 
 __all__ = [
     HtmlResponseOnly.__name__,
+    NoTemplateFound.__name__,
     ResponseNotRenderable.__name__,
 ]
