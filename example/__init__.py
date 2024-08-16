@@ -153,19 +153,10 @@ def form_page():
 
 
 @app.post("/completed-form")
-@qc.render_component(html_only=True)
+@qc.render_component(
+    # You can give a "wrapper" component to use for wrapping an iterable result in html render mode
+    wrapper=qc.UnorderedList,  # NOTE: By default uses `qc.Div`
+)
 async def receive_form(form: CustomForm = Depends(qc.form_handler(CustomForm))):
-    return qc.Div(
-        items=[
-            qc.Paragraph(content="Form Data:"),
-            qc.UnorderedList(
-                # NOTE: You can give each item a uniform set of css/extra attrs via this:
-                item_css={"my-5"},
-                item_attributes=dict(something="else"),
-                items=[
-                    qc.Paragraph(content=f"{field}: {value}")
-                    for field, value in form.model_dump().items()
-                ],
-            ),
-        ]
-    )
+    # NOTE: The `form_handler` dependency will handle parsing and unflattening native HTML Forms
+    return [f"{field}: {value}" for field, value in form.model_dump().items()]

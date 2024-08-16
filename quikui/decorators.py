@@ -9,6 +9,7 @@ from typing import (
     get_args,
     GenericAlias,
     _GenericAlias,
+    Iterable,
     types,
 )
 from fastapi import (
@@ -22,7 +23,7 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Template
 from pydantic import BaseModel
 
-from .components import BaseComponent
+from .components import BaseComponent, Div
 from .exceptions import HtmlResponseOnly, ResponseNotRenderable
 from .utils import (
     DependsHtmlResponse,
@@ -38,6 +39,7 @@ from .utils import (
 def render_component(
     html_only: bool = False,
     template: Template | None = None,
+    wrapper: Callable[[Iterable[BaseComponent]], BaseComponent] | None = None,
 ) -> Callable[[MaybeAsyncFunc[P, T]], Callable[P, Coroutine[None, None, T | Response]]]:
     """
     A decorator that should be used to automatically render an instance or sequence of
@@ -52,6 +54,11 @@ def render_component(
         template (:class:`~jinja2.Template` | None):
             The template to use to render the model with using `result.model_dump()`.
             Defaults to assuming return is a subclass of :class:`~quikui.BaseComponent`.
+
+        wrapper:
+            Function to use to wrap a sequence (e.g. ``list``) returned from a handler to
+            transform it into an instance of :class:`~quikui.BaseComponent` for rendering.
+            Defaults to :class:`~quikui.Div` for rendering a sequence result.
 
     Raises:
         :class:`~quikui.HtmlResponseOnly`:
@@ -110,9 +117,9 @@ def render_component(
                 and isinstance(result, (tuple, list))
                 and all(isinstance(r, BaseModel) for r in result)
             ):
-                result = "".join(
-                    template.render(**r.model_dump()) for r in result
-                )
+                result = (wrapper if wrapper else Div)(
+                    *(template.render(**r.model_dump()) for r in result),
+                ).__html__()  # NOTE: `__html__` is suggested for defaults
 
             elif isinstance(result, BaseComponent):
                 result = result.__html__()  # NOTE: `__html__` is suggested for defaults
@@ -120,9 +127,16 @@ def render_component(
             elif isinstance(result, (tuple, list)) and all(
                 isinstance(r, BaseComponent) for r in result
             ):
-                result = "".join(
-                    r.__html__() for r in result
-                )
+                result = (wrapper if wrapper else Div)(
+                    *((r.model_dump_html()) for r in result),
+                ).__html__()  # NOTE: `__html__` is suggested for defaults
+
+            elif isinstance(result, (tuple, list)) and all(
+                isinstance(r, str) for r in result
+            ):
+                result = (wrapper if wrapper else Div)(
+                    *result,
+                ).__html__()  # NOTE: `__html__` is suggested for defaults
 
             elif not isinstance(result, str):
                 # NOTE: Should not happen if library is used properly
