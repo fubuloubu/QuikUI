@@ -1,36 +1,37 @@
 from fastapi import FastAPI, Request, Form, Depends
 from enum import Enum
-import quikui as qc
+import quikui as qk
 from pydantic import BaseModel, Field
 
 
 app = FastAPI()
 
 
-class CustomPage(qc.BaseComponent):
+class CustomPage(qk.BaseComponent):
     html_template_package = "example"
 
     title: str
-    content: list[qc.BaseComponent]
+    content: list[qk.BaseComponent]
 
 
-@app.get("/")
-@app.get("/index.html")
-@qc.render_component(html_only=True)
+# NOTE: It is recommended to exclude `html_only=True` routes from the schema
+@app.get("/", include_in_schema=False)
+@app.get("/index.html", include_in_schema=False)
+@qk.render_component(html_only=True)
 async def index():
     return CustomPage(
         title="Basic Demo App",
         content=[
-            qc.Div(
-                qc.Heading("Basic Component Demo"),
-                qc.Paragraph("This is a paragraph element."),
-                qc.Div(
-                    qc.Paragraph("This is a paragraph inside a div."),
-                    qc.Paragraph("This is another paragraph inside a div."),
-                    qc.Paragraph(
-                        content=qc.Span(
+            qk.Div(
+                qk.Heading("Basic Component Demo"),
+                qk.Paragraph("This is a paragraph element."),
+                qk.Div(
+                    qk.Paragraph("This is a paragraph inside a div."),
+                    qk.Paragraph("This is another paragraph inside a div."),
+                    qk.Paragraph(
+                        content=qk.Span(
                             "This is a span ",
-                            qc.Anchor(
+                            qk.Anchor(
                                 "with a link",
                                 route="https://google.com",
                                 # You can add extra html attributes via kwargs
@@ -42,10 +43,10 @@ async def index():
                     # Can add custom CSS classes to any component via `css=...`
                     css="my-3",
                 ),
-                qc.Paragraph(
-                    qc.Span(
+                qk.Paragraph(
+                    qk.Span(
                         "This is another span with a link",
-                        qc.Anchor(
+                        qk.Anchor(
                             " to another page",
                             route="/another-page",
                         ),
@@ -58,23 +59,23 @@ async def index():
 
 
 @app.get("/another-page")
-@qc.render_component(html_only=True)
+@qk.render_component(html_only=True)
 def another_page():
     return CustomPage(
         title="A page with dynamic content",
         content=[
-            qc.Heading("Using HTMX"),
-            qc.Paragraph(
+            qk.Heading("Using HTMX"),
+            qk.Paragraph(
                 "This button uses HTMX to dynamically fetch content"
                 " from the server using a GET request."
             ),
-            qc.Button(
+            qk.Button(
                 "Get Dynamic Content",
                 # can also add extra attributes via `attrs=dict(...)` kwarg
                 # NOTE: This is useful for when attrs have `-` in them, or are protected keywords
                 attrs={"hx-get": "/dynamic", "type": "button", "hx-swap": "outerHTML"},
             ),
-            qc.Button(
+            qk.Button(
                 "Get Form",
                 attrs={"hx-get": "/form", "type": "button", "hx-swap": "outerHTML"},
             ),
@@ -83,7 +84,7 @@ def another_page():
 
 
 # NOTE: The components used do not have to be so fine-grained,
-class CustomComponent(qc.BaseComponent):
+class CustomComponent(qk.BaseComponent):
     """To make a renderable component, just subclass BaseComponent"""
 
     text: str = "Some random gibberish!"
@@ -100,7 +101,7 @@ class CustomComponent(qc.BaseComponent):
 
 
 @app.get("/dynamic")
-@qc.render_component()  # NOTE: Allowed both w/ html and json response modes when `html_only=False`
+@qk.render_component()  # NOTE: Allows both w/ html and json response modes when `html_only=False`
 def dynamic_content():
     return CustomComponent()
 
@@ -111,29 +112,30 @@ class CarTypes(Enum):
     DODGE = "Dodge"
 
 
-class CustomForm(qc.FormModel):
+# NOTE: This is not a component!
+class CustomForm(qk.FormModel):
     username: str = Field(
-        form_type=qc.TextInput,
+        form_type=qk.TextInput,
         form_attributes=dict(label="Username:", add_break=True),
     )
     email: str = Field(
-        form_type=qc.EmailInput,
+        form_type=qk.EmailInput,
         form_attributes=dict(label="Email:", add_break=True),
     )
     password: str = Field(
-        form_type=qc.PasswordInput,
+        form_type=qk.PasswordInput,
         form_attributes=dict(label="Password:", add_break=True),
     )
     save_password: bool = Field(
-        form_type=qc.CheckboxInput,
+        form_type=qk.CheckboxInput,
         form_attributes=dict(label="Save Password?"),
     )
     car_choice: CarTypes = Field(
-        form_type=qc.RadioInput,
+        form_type=qk.RadioInput,
         form_attributes=dict(label="First Choice:"),
     )
     backup_choice: CarTypes = Field(
-        form_type=qc.SelectionInput,
+        form_type=qk.SelectionInput,
         form_attributes=dict(
             label="Second Choice:",
             selected=CarTypes.NONE_SELECTED,
@@ -145,7 +147,7 @@ class CustomForm(qc.FormModel):
 
 
 @app.get("/form")
-@qc.render_component(html_only=True)  # NOTE: Only need this page to fetch the form
+@qk.render_component(html_only=True)  # NOTE: Only need this page to fetch the form
 def form_page():
     return CustomForm.create_form(
         id="a-form", form_attrs={"hx-post": "/completed-form"}
@@ -153,10 +155,10 @@ def form_page():
 
 
 @app.post("/completed-form")
-@qc.render_component(
+@qk.render_component(
     # You can give a "wrapper" component to use for wrapping an iterable result in html render mode
-    wrapper=qc.UnorderedList,  # NOTE: By default uses `qc.Div`
+    wrapper=qk.UnorderedList,  # NOTE: By default uses `qk.Div`
 )
-async def receive_form(form: CustomForm = Depends(qc.form_handler(CustomForm))):
+async def receive_form(form: CustomForm = Depends(qk.form_handler(CustomForm))):
     # NOTE: The `form_handler` dependency will handle parsing and unflattening native HTML Forms
     return [f"{field}: {value}" for field, value in form.model_dump().items()]
