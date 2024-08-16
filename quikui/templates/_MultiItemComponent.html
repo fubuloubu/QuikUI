@@ -1,3 +1,4 @@
-<{{ __component_name__|lower }} {{ __extra_attrs__ }}>
-  {% for item in items -%}{{ item }}{%- endfor %}
-</{{ __component_name__|lower }}>
+<{{ __quikui_component_name__|lower }}
+{%- if __extra_attrs__ %} {{ __extra_attrs__ }}{% endif %}>
+  {%- for item in items -%}{{ item }}{%- endfor -%}
+</{{ __quikui_component_name__|lower }}>

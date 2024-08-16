@@ -156,7 +156,7 @@ class BaseComponent(BaseModel):
     render. Defaults to `./templates`. Must be a package resource bundled with the package."""
 
     __quikui_component_name__: ClassVar[str | None] = None
-    """To override the value of ``__component_name__`` when rendering the component."""
+    """To override the value of ``__quikui_component_name__`` when rendering the component."""
 
     _css_: CssClasses = PrivateAttr(default_factory=CssClasses)
     """Add extra CSS classes to this component. Useful for integration with your design system."""
@@ -300,7 +300,7 @@ class BaseComponent(BaseModel):
         if attrs:
             model_dict["__extra_attrs__"] = attrs.model_dump()
 
-        model_dict["__component_name__"] = (
+        model_dict["__quikui_component_name__"] = (
             self.__quikui_component_name__ or self.__class__.__name__
         )
 

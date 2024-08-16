@@ -1,1 +1,4 @@
-<{{ __component_name__|lower }} {{ __extra_attrs__ }}>{{ content }}</{{ __component_name__|lower }}>
+<{{ __quikui_component_name__|lower }}
+{%- if __extra_attrs__ %} {{ __extra_attrs__ }}{% endif %}>
+  {{- content -}}
+</{{ __quikui_component_name__|lower }}>
