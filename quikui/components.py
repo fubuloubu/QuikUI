@@ -411,7 +411,6 @@ class Span(_MultiItemComponent):
 
 class ListItem(_SingleContentComponent):
     __quikui_component_name__ = "li"
-    content: str | BaseComponent
 
 
 class _ListComponent(_MultiItemComponent):
