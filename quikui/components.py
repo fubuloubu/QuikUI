@@ -78,7 +78,7 @@ class CssClasses(RootModel):
 
     @model_serializer()
     def serialize_css_classes(self) -> str:
-        return " ".join(self.root)
+        return " ".join(sorted(self.root))
 
 
 class Attributes(RootModel):
