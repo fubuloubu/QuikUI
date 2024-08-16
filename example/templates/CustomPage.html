@@ -5,7 +5,6 @@
 
 {% block content %}
   {% for item in content %}
-    {# NOTE: `item` is safe because it has been pre-rendered #}
-    {{ item.model_dump_html()|safe }}
+    {{ item }}
   {% endfor %}
 {% endblock content %}
