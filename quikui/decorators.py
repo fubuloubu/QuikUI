@@ -12,11 +12,9 @@ from typing import (
     types,
 )
 from fastapi import (
-    HTTPException,
     Depends,
     Header,
     Request,
-    status,
     Response,
 )
 from fastapi.dependencies.utils import get_typed_return_annotation
@@ -25,6 +23,7 @@ from jinja2 import Template
 from pydantic import BaseModel
 
 from .components import BaseComponent
+from .exceptions import HtmlResponseOnly, ResponseNotRenderable
 from .utils import (
     DependsHtmlResponse,
     append_to_signature,
@@ -55,10 +54,12 @@ def render_component(
             Defaults to assuming return is a subclass of :class:`~quikui.BaseComponent`.
 
     Raises:
-        :class:`~fastapi.HTTPException`:
+        :class:`~quikui.HtmlResponseOnly`:
             A 406 error if ``html_only`` is ``True`` and did not detect an HTML expected response.
-        ValueError: If the result of executing the function is not an instance of str,
-            :class:`~quikui.BaseComponent`, or Iterable[:class:`~fastapi.BaseComponent`].
+
+        :class:`~quikui.ResponseNotRenderable`: If the result of evaluating the handler function is
+            not an instance of str, :class:`~quikui.BaseComponent`, or
+            a sequence of :class:`~quikui.BaseComponent`s, and no ``template`` is provided.
 
     Usage example::
 
@@ -95,10 +96,7 @@ def render_component(
             **kwargs: P.kwargs,
         ) -> T | Response:
             if html_only and __html_response_requested is None:
-                raise HTTPException(
-                    status.HTTP_406_NOT_ACCEPTABLE,
-                    "This route can only provide HTML responses. Please set Accept headers.",
-                )
+                raise HtmlResponseOnly()
 
             result = await execute_maybe_sync_func(func, *args, **kwargs)
             if __html_response_requested is None or isinstance(result, Response):
@@ -127,14 +125,10 @@ def render_component(
                 )
 
             elif not isinstance(result, str):
-                # NOTE: Should not happen if library is used properly, will raise 500 server exception
-                raise ValueError(
-                    "Result must either be an HTML string,"
-                    "an instance of a BaseComponent subclass, "
-                    "or an iterable of BaseComponent subclasses."
-                )
+                # NOTE: Should not happen if library is used properly
+                raise ResponseNotRenderable(result)
 
-            # else: `result` is str, assume it is HTML
+            # else: `result` is str, assume it is HTML to respond with
 
             if response := get_response(kwargs):
                 return HTMLResponse(result, headers=response.headers)
