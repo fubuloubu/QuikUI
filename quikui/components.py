@@ -471,12 +471,6 @@ class _ListComponent(_MultiItemComponent):
 
         return self
 
-    @model_serializer()
-    def serialize_as_item_content(self):
-        # NOTE: This is so that when serializing this to dict/json,
-        #       it appears as if it were `List[inner]`
-        return [item.content for item in self.items]
-
 
 class UnorderedList(_ListComponent):
     __quikui_component_name__ = "ul"
