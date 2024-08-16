@@ -21,6 +21,8 @@ from fastapi import (
 )
 from fastapi.dependencies.utils import get_typed_return_annotation
 from fastapi.responses import HTMLResponse
+from jinja2 import Template
+from pydantic import BaseModel
 
 from .components import BaseComponent
 from .utils import (
@@ -36,16 +38,21 @@ from .utils import (
 
 def render_component(
     html_only: bool = False,
-    # render_model: BaseComponent | None = None,
+    template: Template | None = None,
 ) -> Callable[[MaybeAsyncFunc[P, T]], Callable[P, Coroutine[None, None, T | Response]]]:
     """
     A decorator that should be used to automatically render an instance or sequence of
     :class:`~quikui.BaseComponent` subclass(es) into an :class:`~fastapi.responses.HTMLResponse`
-    to respond to an incoming request that expects an HTML response.
+    to respond to an incoming request that expects an HTML response (according to a heuristic).
 
     Args:
         html_only (bool):
             Whether this route should only accept Requests that expect an HTML response.
+            Defaults to allowing both html and json responses, depending on heuristic detection.
+
+        template (:class:`~jinja2.Template` | None):
+            The template to use to render the model with using `result.model_dump()`.
+            Defaults to assuming return is a subclass of :class:`~quikui.BaseComponent`.
 
     Raises:
         :class:`~fastapi.HTTPException`:
@@ -59,16 +66,21 @@ def render_component(
         >>>
         >>> app = FastAPI()
         >>>
-        >>>
         >>> @app.get("/path")
         >>> @qk.render_component()
         >>> def get_something():
-        >>>     return instance_of_basecomponent_subclass  # Automatically converted to html
+        >>>     return instance_of_basecomponent_subclass  # Automatically converted to HTMLResponse
 
 
-    ```note
-    Errors are only raised when the decorated function is called. Any unexpected error will
-    generate a 500 Server Error in your FastAPI app.
+    ```{warning}
+    If using the ``template`` keyword argument, please note that the result model is dumped using
+    the normal Pydantic `.model_dump` method and therefore will not contain any extra attributes
+    or classes that QuikUI provides.
+    ```
+
+    ```{warning}
+    Errors are only raised when the decorated function is called.
+    Any unexpected error will generate a 500 Server Error in your FastAPI app.
     ```
     """
 
@@ -92,32 +104,26 @@ def render_component(
             if __html_response_requested is None or isinstance(result, Response):
                 return result
 
-            if (render_model := get_typed_return_annotation(func)) and isinstance(
-                render_model, (GenericAlias, _GenericAlias, types.UnionType)
+            if template and isinstance(result, BaseModel):
+                result = template.render(**result.model_dump())
+
+            elif (
+                template
+                and isinstance(result, (tuple, list))
+                and all(isinstance(r, BaseModel) for r in result)
             ):
-                # List[...] or list[...] or Tuple[...] or tuple[...]
-                render_model = get_args(render_model)[0]
-                # NOTE: `get_args() returns either (Class,) or (Class, None)
-
-            # else: `render_model` is None, which is okay
-
-            if isinstance(result, BaseComponent):
-                result = (
-                    render_model.template.render(**result.model_dump())
-                    if render_model is not None
-                    else result.model_dump_html()
+                result = "".join(
+                    template.render(**r.model_dump()) for r in result
                 )
+
+            elif isinstance(result, BaseComponent):
+                result = result.__html__()  # NOTE: `__html__` is suggested for defaults
 
             elif isinstance(result, (tuple, list)) and all(
                 isinstance(r, BaseComponent) for r in result
             ):
                 result = "".join(
-                    (
-                        render_model.template.render(**r.model_dump())
-                        if render_model is not None
-                        else r.model_dump_html()
-                    )
-                    for r in result
+                    r.__html__() for r in result
                 )
 
             elif not isinstance(result, str):
