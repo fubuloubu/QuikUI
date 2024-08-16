@@ -221,12 +221,12 @@ class BaseComponent(BaseModel):
         return env
 
     @classmethod
-    def quikui_template(cls, template_type: str | None = None) -> Template:
+    def quikui_template(cls, template_variant: str | None = None) -> Template:
         """
         The template that should be used to render this model.
 
         Args:
-            template_type (str | None): Template type (file extension prepend) to find.
+            template_variant (str | None): Template type (file extension prepend) to find.
                 This allows the use of custom templates for different scenarios, such as
                 ``MyClass.list.html`` if ``template_type="list"``.
                 Defaults to finding templates by their classname e.g. ``MyClass.html``.
@@ -242,8 +242,9 @@ class BaseComponent(BaseModel):
         ```
 
         ```{note}
-        This classmethod is useful in combination with the ``template`` keyword argument on the
-        :func:`~quikui.render_component` decorator function in order to directly render a component.
+        This classmethod is useful in combination with the ``template_variant`` keyword argument on
+        the :func:`~quikui.render_component` decorator function in order to directly render a
+        component.
         ```
         """
         template_class = cls
@@ -252,8 +253,8 @@ class BaseComponent(BaseModel):
 
             try:
                 return env.get_template(
-                    f"{template_class.__name__}.{template_type}.html"
-                    if template_type
+                    f"{template_class.__name__}.{template_variant}.html"
+                    if template_variant
                     else f"{template_class.__name__}.html"
                 )
 
@@ -263,13 +264,13 @@ class BaseComponent(BaseModel):
                 template_class = template_class.__base__
 
         # NOTE: If we get to BaseComponent, there was some error in user's environment
-        raise NoTemplateFound(cls, template_type)
+        raise NoTemplateFound(cls, template_variant)
 
     def model_dump_html(
         self,
         include: Container | None = None,
         exclude: Container | None = None,
-        template_type: str | None = None,
+        template_variant: str | None = None,
         **kwargs: dict,
     ) -> str:
         """
@@ -282,7 +283,7 @@ class BaseComponent(BaseModel):
 
             include: Fields to include that would otherwise be skipped.
             exclude: Fields that should be skipped which would otherwise be included.
-            template_type (str | None): Template type (file extension) to find.
+            template_variant (str | None): Template type (file extension) to find.
                 This allows the use of custom templates for different scenarios, such as
                 ``MyClass.list.html``. Defaults to finding normal ``MyClass.html`` templates.
             **kwargs: Any other attributes you want to pass directly to Jinja2 template rendering.
@@ -326,7 +327,9 @@ class BaseComponent(BaseModel):
             self.__quikui_component_name__ or self.__class__.__name__
         )
 
-        return self.quikui_template(template_type=template_type).render(**model_dict)
+        return self.quikui_template(template_variant=template_variant).render(
+            **model_dict
+        )
 
     def __html__(self) -> str:
         """

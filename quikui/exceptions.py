@@ -7,9 +7,9 @@ class BaseException(Exception):
 
 
 class NoTemplateFound(BaseException, RuntimeError):
-    def __init__(self, cls: Type, template_type: str | None):
-        if template_type:
-            template_name = f"{cls.__name__}.{template_type}.html"
+    def __init__(self, cls: Type, template_variant: str | None):
+        if template_variant:
+            template_name = f"{cls.__name__}.{template_variant}.html"
         else:
             template_name = f"{cls.__name__}.html"
 
