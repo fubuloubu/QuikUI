@@ -189,7 +189,6 @@ class BaseComponent(BaseModel):
         self.__pydantic_extra__ = {}
 
     @classmethod
-    @property
     @cache
     def env(cls) -> Environment:
         """
@@ -215,7 +214,6 @@ class BaseComponent(BaseModel):
         return env
 
     @classmethod
-    @property
     def template(cls) -> Template:
         """
         The template that should be used to render this model.
