@@ -40,6 +40,7 @@ def render_component(
     html_only: bool = False,
     template: Template | None = None,
     wrapper: Callable[[Iterable[BaseComponent]], BaseComponent] | None = None,
+    wrapper_kwargs: dict | None = None,
 ) -> Callable[[MaybeAsyncFunc[P, T]], Callable[P, Coroutine[None, None, T | Response]]]:
     """
     A decorator that should be used to automatically render an instance or sequence of
@@ -59,6 +60,10 @@ def render_component(
             Function to use to wrap a sequence (e.g. ``list``) returned from a handler to
             transform it into an instance of :class:`~quikui.BaseComponent` for rendering.
             Defaults to :class:`~quikui.Div` for rendering a sequence result.
+
+        **wrapper_kwargs:
+            Keyword arguments to forward to constructing the model given in ``wrapper`` when
+            rendering a sequence result (e.g. `return wrapper(*result, **wrapper_kwargs)`).
 
     Raises:
         :class:`~quikui.HtmlResponseOnly`:
@@ -119,6 +124,7 @@ def render_component(
             ):
                 result = (wrapper if wrapper else Div)(
                     *(template.render(**r.model_dump()) for r in result),
+                    **wrapper_kwargs,
                 ).__html__()  # NOTE: `__html__` is suggested for defaults
 
             elif isinstance(result, BaseComponent):
@@ -129,6 +135,7 @@ def render_component(
             ):
                 result = (wrapper if wrapper else Div)(
                     *((r.model_dump_html()) for r in result),
+                    **wrapper_kwargs,
                 ).__html__()  # NOTE: `__html__` is suggested for defaults
 
             elif isinstance(result, (tuple, list)) and all(
@@ -136,6 +143,7 @@ def render_component(
             ):
                 result = (wrapper if wrapper else Div)(
                     *result,
+                    **wrapper_kwargs,
                 ).__html__()  # NOTE: `__html__` is suggested for defaults
 
             elif not isinstance(result, str):

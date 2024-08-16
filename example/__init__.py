@@ -162,6 +162,11 @@ def form_page():
 @qk.render_component(
     # You can give a "wrapper" component to use for wrapping an iterable result in html render mode
     wrapper=qk.UnorderedList,  # NOTE: By default uses `qk.Div`
+    # NOTE: Can add additional keyword arguments to initializing `wrapper`
+    wrapper_kwargs=dict(
+        item_css={"my-5"},
+        item_attributes=dict(something="else"),
+    ),
 )
 async def receive_form(form: CustomForm = Depends(qk.form_handler(CustomForm))):
     # NOTE: The `form_handler` dependency will handle parsing and unflattening native HTML Forms
