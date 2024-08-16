@@ -158,10 +158,10 @@ class BaseComponent(BaseModel):
     __quikui_component_name__: ClassVar[str | None] = None
     """To override the value of ``__quikui_component_name__`` when rendering the component."""
 
-    _css_: CssClasses = PrivateAttr(default_factory=CssClasses)
+    _quikui_css_classes: CssClasses = PrivateAttr(default_factory=CssClasses)
     """Add extra CSS classes to this component. Useful for integration with your design system."""
 
-    _attrs_: Attributes = PrivateAttr(default_factory=Attributes)
+    _quikui_extra_attributes: Attributes = PrivateAttr(default_factory=Attributes)
     """Add extra attributes to this component. Exposed to template rendering as
     ``__extra_attrs__``."""
 
@@ -177,7 +177,7 @@ class BaseComponent(BaseModel):
     ):
         super().__init__(**model_fields)
 
-        self._css_ = CssClasses(css)
+        self._quikui_css_classes = CssClasses(css)
 
         if attrs is None:
             attrs = dict()
@@ -185,7 +185,7 @@ class BaseComponent(BaseModel):
         if self.__pydantic_extra__:
             attrs.update(self.__pydantic_extra__)
 
-        self._attrs_ = Attributes(attrs)
+        self._quikui_extra_attributes = Attributes(attrs)
         self.__pydantic_extra__ = {}
 
     @classmethod
@@ -289,14 +289,11 @@ class BaseComponent(BaseModel):
             if f not in exclude
         )
 
-        attrs = self._attrs_.copy()
+        if attrs := self._quikui_extra_attributes:
+            model_dict["quikui_extra_attributes"] = attrs.model_dump()
 
-        if self._css_:
-            # NOTE: Not possible to set `class=...` in `Model(...)`, so this is fine
-            self._attrs_["class"] = self._css_.model_dump()
-
-        if attrs:
-            model_dict["__extra_attrs__"] = attrs.model_dump()
+        if css := self._quikui_css_classes:
+            model_dict["quikui_css_classes"] = css.model_dump()
 
         model_dict["__quikui_component_name__"] = (
             self.__quikui_component_name__ or self.__class__.__name__
@@ -413,9 +410,17 @@ class _ListComponent(_MultiItemComponent):
 
     @model_validator(mode="after")
     def add_item_css_and_attributes(self):
-        for item in self.items:
-            item._css_.update(self.item_css)
-            item._attr_.update(self.item_attributes)
+
+        def apply_css_to_item(_: int, item: ListItem):
+            item._quikui_css_classes.update(self.item_css)
+
+        def add_attributes_to_item(_: int, item: ListItem):
+            item._quikui_extra_attributes.update(self.item_attributes)
+
+        for idx, item in enumerate(self.items):
+            apply_css_to_item(idx, item)
+            add_attributes_to_item(idx, item)
+
         return self
 
     @model_serializer()
@@ -471,11 +476,11 @@ class FormInput(BaseComponent):
 
     @model_validator(mode="after")
     def add_id_to_label(self):
-        if not (id := self._attrs_.get("id")):
-            id = self._attrs_["id"] = self.name
+        if not (id := self._quikui_extra_attributes.get("id")):
+            id = self._quikui_extra_attributes["id"] = self.name
 
         if self.label:
-            self.label._attrs_["for"] = id
+            self.label._quikui_extra_attributes["for"] = id
 
         return self
 

@@ -1,1 +1,5 @@
-<a href={{ route }} {{ __extra_attrs__ }}>{{ content }}</a>
+<a href={{ route }}
+{%- if quikui_css_classes %} class="{{ quikui_css_classes }}"{% endif %}
+{%- if quikui_extra_attributes %} {{ quikui_extra_attributes }}{% endif %}>
+  {{- content -}}
+</a>
