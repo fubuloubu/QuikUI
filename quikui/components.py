@@ -348,9 +348,6 @@ class BaseComponent(BaseModel):
         return self.model_dump_html()
 
 
-class Heading(BaseComponent):
-    content: str | BaseComponent
-    level: Annotated[int, Field(strict=True, ge=1, le=5)] = 1
 
 
 class _SingleContentComponent(BaseComponent):
@@ -361,13 +358,22 @@ class _SingleContentComponent(BaseComponent):
         kwargs["content"] = content
         super().__init__(**kwargs)
 
-class Paragraph(_SingleContentComponent):
-    __quikui_component_name__ = "p"
+
+class Heading(_SingleContentComponent):
+    level: Annotated[int, Field(strict=True, ge=1, le=5, exclude=True)] = 1
+
+    @property
+    def __quikui_component_name__(self) -> str:
+        return f"h{self.level}"
 
 
 class Break(BaseComponent):
     def model_dump_html(self, **kwargs) -> str:
         return "<br>"
+
+
+class Paragraph(_SingleContentComponent):
+    __quikui_component_name__ = "p"
 
 
 class Anchor(_SingleContentComponent):
