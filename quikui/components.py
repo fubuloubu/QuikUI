@@ -293,6 +293,10 @@ class Heading(BaseComponent):
 class _SingleContentComponent(BaseComponent):
     content: str | BaseComponent
 
+    def __init__(self, content: str | BaseComponent = None, **kwargs):
+        # NOTE: Let's us do `cls(val)` instead of `cls(content=val)`
+        kwargs["content"] = content
+        super().__init__(**kwargs)
 
 class Paragraph(_SingleContentComponent):
     __quikui_component_name__ = "p"
@@ -314,6 +318,18 @@ class Button(_SingleContentComponent):
 
 class _MultiItemComponent(BaseComponent):
     items: list[str | BaseComponent] = []
+
+    def __init__(self, *items, **kwargs):
+        # NOTE: Let's us do `cls(*vals)` instead of `cls(items=vals)`
+        if "items" not in kwargs:
+            kwargs["items"] = list(items)
+
+        elif len(items) > 0:
+            raise ValueError(
+                f"Cannot use `{self.__class__.__name__}(*items)` with `items=` kwarg."
+            )
+
+        super().__init__(**kwargs)
 
 
 class Div(_MultiItemComponent):

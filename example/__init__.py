@@ -22,46 +22,36 @@ async def index():
         title="Basic Demo App",
         content=[
             qc.Div(
-                items=[
-                    qc.Heading(content="Basic Component Demo"),
-                    qc.Paragraph(content="This is a paragraph element."),
-                    qc.Div(
-                        # Can add custom CSS classes to any component via `css=...`
-                        css="my-3",
-                        items=[
-                            qc.Paragraph(content="This is a paragraph inside a div."),
-                            qc.Paragraph(
-                                content="This is another paragraph inside a div."
-                            ),
-                            qc.Paragraph(
-                                content=qc.Span(
-                                    items=[
-                                        "This is a span ",
-                                        qc.Anchor(
-                                            content="with a link",
-                                            route="https://google.com",
-                                            # You can add extra html attributes via kwargs
-                                            target="_blank",  # NOTE: Open link in a new tab
-                                        ),
-                                        " to something inside that same div.",
-                                    ]
-                                )
-                            ),
-                        ],
-                    ),
+                qc.Heading("Basic Component Demo"),
+                qc.Paragraph("This is a paragraph element."),
+                qc.Div(
+                    qc.Paragraph("This is a paragraph inside a div."),
+                    qc.Paragraph("This is another paragraph inside a div."),
                     qc.Paragraph(
                         content=qc.Span(
-                            items=[
-                                "This is another span ",
-                                qc.Anchor(
-                                    content="with a link",
-                                    route="/another-page",
-                                ),
-                                " to another page, outside the div.",
-                            ]
-                        ),
+                            "This is a span ",
+                            qc.Anchor(
+                                "with a link",
+                                route="https://google.com",
+                                # You can add extra html attributes via kwargs
+                                target="_blank",  # NOTE: Open link in a new tab
+                            ),
+                            " to something inside that same div.",
+                        )
                     ),
-                ]
+                    # Can add custom CSS classes to any component via `css=...`
+                    css="my-3",
+                ),
+                qc.Paragraph(
+                    qc.Span(
+                        "This is another span with a link",
+                        qc.Anchor(
+                            " to another page",
+                            route="/another-page",
+                        ),
+                        ", outside the div.",
+                    ),
+                ),
             )
         ],
     )
@@ -73,22 +63,20 @@ def another_page():
     return CustomPage(
         title="A page with dynamic content",
         content=[
-            qc.Heading(content="Using HTMX"),
+            qc.Heading("Using HTMX"),
             qc.Paragraph(
-                content=(
-                    "This button uses HTMX to dynamically fetch content"
-                    " from the server using a GET request."
-                )
+                "This button uses HTMX to dynamically fetch content"
+                " from the server using a GET request."
             ),
             qc.Button(
+                "Get Dynamic Content",
                 # can also add extra attributes via `attrs=dict(...)` kwarg
                 # NOTE: This is useful for when attrs have `-` in them, or are protected keywords
                 attrs={"hx-get": "/dynamic", "type": "button", "hx-swap": "outerHTML"},
-                content="Get Dynamic Content",
             ),
             qc.Button(
+                "Get Form",
                 attrs={"hx-get": "/form", "type": "button", "hx-swap": "outerHTML"},
-                content="Get Form",
             ),
         ],
     )
@@ -96,7 +84,7 @@ def another_page():
 
 # NOTE: The components used do not have to be so fine-grained,
 class CustomComponent(qc.BaseComponent):
-    """To make a renderable component, just subclass this..."""
+    """To make a renderable component, just subclass BaseComponent"""
 
     text: str = "Some random gibberish!"
 
@@ -108,8 +96,7 @@ class CustomComponent(qc.BaseComponent):
 
     # NOTE: If you override `html_template_package` class variable with your own
     #       package or app, and that contains a `/templates` folder that has a template
-    #       with the same name as this class, then it will "auto-render" using that template
-    #       without having to override `model_dump_html`
+    #       with the name of this class and the `.html` extension, then it will "auto-render"
 
 
 @app.get("/dynamic")
