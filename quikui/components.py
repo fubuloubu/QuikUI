@@ -348,6 +348,14 @@ class BaseComponent(BaseModel):
         return self.model_dump_html()
 
 
+class Break(BaseComponent):
+    def model_dump_html(self, **kwargs) -> str:
+        return "<br>"
+
+
+class Image(BaseComponent):
+    source: str
+    alt_text: str
 
 
 class _SingleContentComponent(BaseComponent):
@@ -365,11 +373,6 @@ class Heading(_SingleContentComponent):
     @property
     def __quikui_component_name__(self) -> str:
         return f"h{self.level}"
-
-
-class Break(BaseComponent):
-    def model_dump_html(self, **kwargs) -> str:
-        return "<br>"
 
 
 class Paragraph(_SingleContentComponent):
@@ -478,10 +481,6 @@ class UnorderedList(_ListComponent):
 
 class OrderedList(_ListComponent):
     __quikui_component_name__ = "ol"
-
-
-class Image(BaseComponent):
-    source: str
 
 
 class InputType(str, Enum):
