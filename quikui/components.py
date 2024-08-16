@@ -227,8 +227,10 @@ class BaseComponent(BaseModel):
         """
         template_class = cls
         while issubclass(template_class, BaseComponent):
+            env = template_class.quikui_environment()
+
             try:
-                return template_class.env.get_template(
+                return env.get_template(
                     f"{template_class.__name__}.html"
                 )
 
