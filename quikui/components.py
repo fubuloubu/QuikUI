@@ -385,9 +385,9 @@ class _ListComponent(_MultiItemComponent):
     Usage example::
 
         >>> @app.get("/items")
-        >>> @qk.render_component()
+        >>> @qk.render_component(wrapper=qk.UnorderedList)  # What it returns in HTML mode
         >>> def get_items() -> list[MyItem]:  # What it returns in JSON mode
-        >>>     return qk.UnorderedList(items=session.exec(select(MyItem)).all())
+        >>>     return session.exec(select(MyItem)).all()  # `MyItem` subclasses `BaseComponent`
 
     ```note
     You can add a common set of css classes or attributes to the inner list items by specifying
