@@ -428,8 +428,12 @@ class _ListComponent(_MultiItemComponent):
     ```
     """
 
-    item_css: CssClasses = Field(default_factory=CssClasses, exclude=True)
-    item_attributes: Attributes = Field(default_factory=Attributes, exclude=True)
+    item_css: CssClasses | Callable[[int, ListItem], None] = Field(
+        default_factory=CssClasses, exclude=True
+    )
+    item_attributes: Attributes | Callable[[int, ListItem], None] = Field(
+        default_factory=Attributes, exclude=True
+    )
     items: list[ListItem] = []
 
     @field_validator("items", mode="before")
@@ -440,12 +444,21 @@ class _ListComponent(_MultiItemComponent):
 
     @model_validator(mode="after")
     def add_item_css_and_attributes(self):
+        if isinstance(self.item_css, CssClasses):
 
-        def apply_css_to_item(_: int, item: ListItem):
-            item._quikui_css_classes.update(self.item_css)
+            def apply_css_to_item(_: int, item: ListItem):
+                item._quikui_css_classes.update(self.item_css)
 
-        def add_attributes_to_item(_: int, item: ListItem):
-            item._quikui_extra_attributes.update(self.item_attributes)
+        else:
+            apply_css_to_item = self.item_css
+
+        if isinstance(self.item_attributes, Attributes):
+
+            def add_attributes_to_item(_: int, item: ListItem):
+                item._quikui_extra_attributes.update(self.item_attributes)
+
+        else:
+            add_attributes_to_item = self.item_attributes
 
         for idx, item in enumerate(self.items):
             apply_css_to_item(idx, item)
