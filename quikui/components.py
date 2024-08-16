@@ -225,6 +225,12 @@ class BaseComponent(BaseModel):
         """
         The template that should be used to render this model.
 
+        Args:
+            template_type (str | None): Template type (file extension prepend) to find.
+                This allows the use of custom templates for different scenarios, such as
+                ``MyClass.list.html`` if ``template_type="list"``.
+                Defaults to finding templates by their classname e.g. ``MyClass.html``.
+
         Returns:
             :class:`~jinja2.Template`: The template to render this model with.
 
@@ -234,6 +240,11 @@ class BaseComponent(BaseModel):
         ```{note}
         This method is not cached so updates to templates do not require reloading.
         ```
+
+        ```{note}
+        This classmethod is useful in combination with the ``template`` keyword argument on the
+        :func:`~quikui.render_component` decorator function in order to directly render a component.
+        ```
         """
         template_class = cls
         while issubclass(template_class, BaseComponent):
@@ -241,7 +252,9 @@ class BaseComponent(BaseModel):
 
             try:
                 return env.get_template(
-                    f"{template_class.__name__}.html"
+                    f"{template_class.__name__}.{template_type}.html"
+                    if template_type
+                    else f"{template_class.__name__}.html"
                 )
 
             except Jinja2TemplateNotFound:
@@ -269,6 +282,9 @@ class BaseComponent(BaseModel):
 
             include: Fields to include that would otherwise be skipped.
             exclude: Fields that should be skipped which would otherwise be included.
+            template_type (str | None): Template type (file extension) to find.
+                This allows the use of custom templates for different scenarios, such as
+                ``MyClass.list.html``. Defaults to finding normal ``MyClass.html`` templates.
             **kwargs: Any other attributes you want to pass directly to Jinja2 template rendering.
 
         Returns:
@@ -310,7 +326,7 @@ class BaseComponent(BaseModel):
             self.__quikui_component_name__ or self.__class__.__name__
         )
 
-        return self.quikui_template().render(**model_dict)
+        return self.quikui_template(template_type=template_type).render(**model_dict)
 
     def __html__(self) -> str:
         """
