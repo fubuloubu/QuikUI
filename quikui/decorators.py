@@ -18,9 +18,10 @@ from fastapi import (
     Request,
     Response,
 )
+from fastapi.templating import Jinja2Templates
 from fastapi.dependencies.utils import get_typed_return_annotation
 from fastapi.responses import HTMLResponse
-from jinja2 import Template
+from jinja2 import Template, Environment
 from pydantic import BaseModel
 
 from .components import BaseComponent, Div
@@ -38,7 +39,8 @@ from .utils import (
 
 def render_component(
     html_only: bool = False,
-    template: Template | None = None,
+    template: Template | str | None = None,
+    env: Environment | Jinja2Templates | None = None,
     wrapper: Callable[[Iterable[BaseComponent]], BaseComponent] | None = None,
     wrapper_kwargs: dict | None = None,
 ) -> Callable[[MaybeAsyncFunc[P, T]], Callable[P, Coroutine[None, None, T | Response]]]:
@@ -52,9 +54,14 @@ def render_component(
             Whether this route should only accept Requests that expect an HTML response.
             Defaults to allowing both html and json responses, depending on heuristic detection.
 
-        template (:class:`~jinja2.Template` | None):
+        template (:class:`~jinja2.Template` | str | None):
             The template to use to render the model with using `result.model_dump()`.
+            If it is a string, you **must** use the `env=` kwarg in tandem with it.
             Defaults to assuming return is a subclass of :class:`~quikui.BaseComponent`.
+
+        env (:class:`~jinja2.Environment` | :class:`~fastapi.templating.Jinja2Templates` | None):
+            The template environment that should be used to dynamically fetch a template to render
+            with. Only is required if `template=` kwarg is a string value (the name of a template).
 
         wrapper:
             Function to use to wrap a sequence (e.g. ``list``) returned from a handler to
@@ -97,6 +104,19 @@ def render_component(
     ```
     """
 
+    # NOTE: We must create a getter for the template so that it is dynamically fetched when needed
+    if isinstance(template, str):
+        if env is None:
+            raise AssertionError("`env=` must be set if `template=` is a str.")
+
+        def get_template():
+            return env.get_template(template)
+
+    else:
+
+        def get_template():
+            return template  # type is `Template | None`
+
     def decorator(
         func: MaybeAsyncFunc[P, T],
     ) -> Callable[P, Coroutine[None, None, T | Response]]:
@@ -111,46 +131,50 @@ def render_component(
                 raise HtmlResponseOnly()
 
             result = await execute_maybe_sync_func(func, *args, **kwargs)
+            # NOTE: Short-circut to return response directly if our heuristic fails,
+            #       or a user decides to return a direct Response object (bypassing our logic)
             if __html_response_requested is None or isinstance(result, Response):
                 return result
 
-            if template and isinstance(result, BaseModel):
-                result = template.render(**result.model_dump())
+            if (response_template := get_template()) and isinstance(
+                result, (BaseModel, dict)
+            ):
+                result = response_template.render(
+                    **(result.model_dump() if isinstance(result, BaseModel) else result)
+                )
 
             elif (
-                template
+                response_template
                 and isinstance(result, (tuple, list))
-                and all(isinstance(r, BaseModel) for r in result)
+                and all(isinstance(r, (BaseModel, dict)) for r in result)
             ):
                 result = (wrapper if wrapper else Div)(
-                    *(template.render(**r.model_dump()) for r in result),
-                    **wrapper_kwargs,
-                ).__html__()  # NOTE: `__html__` is suggested for defaults
-
-            elif isinstance(result, BaseComponent):
-                result = result.__html__()  # NOTE: `__html__` is suggested for defaults
-
-            elif isinstance(result, (tuple, list)) and all(
-                isinstance(r, BaseComponent) for r in result
-            ):
-                result = (wrapper if wrapper else Div)(
-                    *((r.model_dump_html()) for r in result),
-                    **wrapper_kwargs,
-                ).__html__()  # NOTE: `__html__` is suggested for defaults
+                    *(
+                        response_template.render(
+                            **(r.model_dump() if isinstance(r, BaseModel) else r)
+                        )
+                        for r in result
+                    ),
+                    **(wrapper_kwargs or {}),
+                )
 
             elif isinstance(result, (tuple, list)) and all(
-                isinstance(r, str) for r in result
+                isinstance(r, (BaseComponent, str)) for r in result
             ):
                 result = (wrapper if wrapper else Div)(
                     *result,
-                    **wrapper_kwargs,
-                ).__html__()  # NOTE: `__html__` is suggested for defaults
+                    **(wrapper_kwargs or {}),
+                )
 
-            elif not isinstance(result, str):
+            elif not isinstance(result, (BaseComponent, str)):
                 # NOTE: Should not happen if library is used properly
                 raise ResponseNotRenderable(result)
 
-            # else: `result` is str, assume it is HTML to respond with
+            # NOTE: Needs `result` after processing
+            if isinstance(result, BaseComponent):
+                result = result.__html__()  # NOTE: `__html__` is suggested for defaults
+
+            # else: `result` is assumed to be HTML str now (NOTE: could be unsafe)
 
             if response := get_response(kwargs):
                 return HTMLResponse(result, headers=response.headers)

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, Form, Depends
+from fastapi.templating import Jinja2Templates
 from enum import Enum
 import quikui as qk
 from pydantic import BaseModel, Field
@@ -7,20 +8,18 @@ import random
 
 app = FastAPI()
 
-
-class CustomPage(qk.BaseComponent):
-    quikui_template_package_name = "example"
-
-    title: str
-    content: list[qk.BaseComponent]
+# You can use your existing the templates the same
+templates = Jinja2Templates(directory="example/templates")
 
 
 # NOTE: It is recommended to exclude `html_only=True` routes from the schema
 @app.get("/", include_in_schema=False)
 @app.get("/index.html", include_in_schema=False)
-@qk.render_component(html_only=True)
+# In fact, `template=` is a nice way to render pages directly without needing a custom Component
+@qk.render_component(html_only=True, template="CustomPage.html", env=templates)
 async def index():
-    return CustomPage(
+    # NOTE: When using `template=`, you can just directly return a dict or BaseModel
+    return dict(
         title="Basic Demo App",
         content=[
             qk.Div(
@@ -60,9 +59,11 @@ async def index():
 
 
 @app.get("/another-page")
-@qk.render_component(html_only=True)
+# NOTE: You can supply a template directly, but be aware it will not automatically update
+#       (Try modifying `CustomPage.html` and refreshing both this page and the previous)
+@qk.render_component(html_only=True, template=templates.get_template("CustomPage.html"))
 def another_page():
-    return CustomPage(
+    return dict(
         title="A page with dynamic content",
         content=[
             qk.Heading("Using HTMX"),
