@@ -27,16 +27,11 @@ class HtmlResponseOnly(BaseException, HTTPException):
         )
 
 
-class ResponseNotRenderable(BaseException, HTTPException):
+class ResponseNotRenderable(BaseException, ValueError):
     def __init__(self, result: Any):
         super().__init__(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                "Result type must either be an HTML-safe string, "
-                "an instance of a BaseComponent subclass, "
-                "or an iterable of BaseComponent subclasses, "
-                f"not {type(result)}."
-            ),
+            "Result type must either be an HTML-safe string, an instance of a BaseComponent "
+            f"subclass, or an iterable of BaseComponent subclasses, not {type(result)}."
         )
 
 
