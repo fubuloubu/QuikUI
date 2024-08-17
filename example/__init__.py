@@ -89,17 +89,13 @@ def another_page():
 class CustomComponent(qk.BaseComponent):
     """To make a renderable component, just subclass BaseComponent"""
 
-    text: str = "Some random gibberish!"
-
-    def model_dump_html(self) -> str:
-        """...and implement this method"""
-        # NOTE: You do not have to subclass a component from the library, simply use whatever
-        #       components or templates you'd like to use to render your models
-        return qc.Paragraph(content=self.text).model_dump_html()
-
     # NOTE: If you override `quikui_template_package_name` class variable with your own
     #       package or app, and that contains a `/templates` folder that has a template
     #       with the name of this class and the `.html` extension, then it will "auto-render"
+    quikui_template_package_name = "example"
+
+    # You can add whatever fields you'd like to your model
+    text: str = "Some random gibberish!"
 
 
 @app.get("/dynamic")
