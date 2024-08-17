@@ -19,7 +19,12 @@ from enum import Enum
 import inspect
 
 from markupsafe import Markup
-from jinja2 import Environment, PackageLoader, TemplateNotFound, Template
+from jinja2 import (
+    Environment,
+    PackageLoader,
+    TemplateNotFound as Jinja2TemplateNotFound,
+    Template,
+)
 from pydantic import (
     BaseModel,
     Field,
@@ -34,6 +39,8 @@ from pydantic.fields import FieldInfo
 from pydantic import ValidationError
 
 from fastapi.exceptions import RequestValidationError
+
+from .exceptions import NoTemplateFound
 
 # NOTE: https://html.spec.whatwg.org/multipage/syntax.html#attributes-2
 VALID_ATTR_CHARS = set(string.printable) - set(""" "'`<>/=""")
@@ -78,7 +85,7 @@ class CssClasses(RootModel):
 
     @model_serializer()
     def serialize_css_classes(self) -> str:
-        return " ".join(self.root)
+        return " ".join(sorted(self.root))
 
 
 class Attributes(RootModel):
@@ -118,6 +125,7 @@ class Attributes(RootModel):
             " ".join(
                 (f'{k}="{v}"' if not isinstance(v, bool) else k)
                 for k, v in self.root.items()
+                # NOTE: Don't render non-"truthy" values e.g. `something=false`
                 if v  # Relies on truthiness to render bools and strings correctly
             )
         )
@@ -126,30 +134,41 @@ class Attributes(RootModel):
 class BaseComponent(BaseModel):
     """
     A subclass of `pydantic.BaseModel` that supports serialization to "safe" HTML. Serialization
-    to HTML is either done by parsing a Jinja2 template (distributed with the package), or by
-    explicitly overriding the `model_dump_html` function in a subclass. It is assumed that you
-    take great care to properly handle user-generated content by "escaping" (making it safe).
+    to HTML is either done by parsing a Jinja2 template (distributed with an associated package),
+    or by explicitly overriding the `model_dump_html` function in a subclass. It is assumed that
+    you take great care to properly handle user-generated content by "escaping" (making it safe).
 
+    ```{warning}
+    The way this library is designed does its best to maintain the property of always auto-escaping
+    user-driven content. However, it is possible to configure your own components using this
+    library to ignore that invariant. Either way, as a developer it is your job to ensure safety of
+    the environment you are creating in your user's browser. For more information, check out:
     https://htmx.org/essays/web-security-basics-with-htmx/#always-use-an-auto-escaping-template-engine
-    ```warning
+    ```
+
+    ```{note}
     Cannot use this model if you rely on special behavior with `ConfigDict(extras="allow")`, as this
-    component overwrites the value of `__pydantic_extra__`
+    component overwrites the value of `__pydantic_extra__` with custom behavior for additonal attrs.
     ```
     """
 
-    html_template_package: ClassVar[str] = "quikui"
+    quikui_template_package_name: ClassVar[str] = "quikui"
     """The package that should be used to search for templates for components that do not
     override `model_dump_html`. If you want to define custom components using your own templates,
-    override this in your base class to your package name. It is assumed the templates are stored
-    in a `./templates` package resource folder. Defaults to this package."""
+    override this in your base class and provide your package's name. Templates are stored in the
+    `./{quikui_template_package_path}` directory as a package resource. Defaults to this package."""
+
+    quikui_template_package_path: ClassVar[str] = "templates"
+    """The directory inside this package that should be used to search for model templates to
+    render. Defaults to `./templates`. Must be a package resource bundled with the package."""
 
     __quikui_component_name__: ClassVar[str | None] = None
-    """To override the value of ``__component_name__`` when rendering the component."""
+    """To override the value of ``__quikui_component_name__`` when rendering the component."""
 
-    _css_: CssClasses = PrivateAttr(default_factory=CssClasses)
+    _quikui_css_classes: CssClasses = PrivateAttr(default_factory=CssClasses)
     """Add extra CSS classes to this component. Useful for integration with your design system."""
 
-    _attrs_: Attributes = PrivateAttr(default_factory=Attributes)
+    _quikui_extra_attributes: Attributes = PrivateAttr(default_factory=Attributes)
     """Add extra attributes to this component. Exposed to template rendering as
     ``__extra_attrs__``."""
 
@@ -165,7 +184,7 @@ class BaseComponent(BaseModel):
     ):
         super().__init__(**model_fields)
 
-        self._css_ = CssClasses(css)
+        self._quikui_css_classes = CssClasses(css)
 
         if attrs is None:
             attrs = dict()
@@ -173,71 +192,111 @@ class BaseComponent(BaseModel):
         if self.__pydantic_extra__:
             attrs.update(self.__pydantic_extra__)
 
-        self._attrs_ = Attributes(attrs)
+        self._quikui_extra_attributes = Attributes(attrs)
         self.__pydantic_extra__ = {}
 
     @classmethod
-    @property
     @cache
-    def env(cls) -> Environment:
+    def quikui_environment(cls) -> Environment:
         """
         The environment to search for templates for this class and all it's subclasses.
 
-        ```note
-        This property is cached.
+        Returns:
+            :class:`~jinja2.Environment`:
+                The environment to search for template(s) to render this class with.
+
+        ```{note}
+        This method is cached since environments will typically not change during runtime.
         ```
         """
         env = Environment(
-            loader=PackageLoader(cls.html_template_package),
+            loader=PackageLoader(
+                package_name=cls.quikui_template_package_name,
+                package_path=cls.quikui_template_package_path,
+            ),
             autoescape=True,
         )
+        # NOTE: Add our special filters here
         env.filters.update({"is_component": is_component})
         return env
 
     @classmethod
-    @property
-    def template(cls) -> Template:
+    def quikui_template(cls, template_variant: str | None = None) -> Template:
         """
         The template that should be used to render this model.
+
+        Args:
+            template_variant (str | None): Template type (file extension prepend) to find.
+                This allows the use of custom templates for different scenarios, such as
+                ``MyClass.list.html`` if ``template_type="list"``.
+                Defaults to finding templates by their classname e.g. ``MyClass.html``.
+
+        Returns:
+            :class:`~jinja2.Template`: The template to render this model with.
+
+        Raises:
+            :class:`~quikui.NoTemplateFound`: If no template was found while recursing.
+
+        ```{note}
+        This method is not cached so updates to templates do not require reloading.
+        ```
+
+        ```{note}
+        This classmethod is useful in combination with the ``template_variant`` keyword argument on
+        the :func:`~quikui.render_component` decorator function in order to directly render a
+        component.
+        ```
         """
         template_class = cls
         while issubclass(template_class, BaseComponent):
+            env = template_class.quikui_environment()
+
             try:
-                return template_class.env.get_template(
-                    f"{template_class.__name__}.html"
+                return env.get_template(
+                    f"{template_class.__name__}.{template_variant}.html"
+                    if template_variant
+                    else f"{template_class.__name__}.html"
                 )
 
-            except TemplateNotFound:
-                # NOTE: Potentially dangerous if multi-class heirarchy exists, only uses first
+            except Jinja2TemplateNotFound:
+                # If no template is found, recurse up the class heirarchy through `.__base__`
+                # NOTE: Potentially dangerous if multi-class heirarchy exists, only uses first base
                 template_class = template_class.__base__
 
-        # NOTE: If we get to this class, there was some error in user's subclassing system
-        raise ValueError(
-            f"Component '{cls.__name__}' does not subclass a component with a valid template."
-        )
+        # NOTE: If we get to BaseComponent, there was some error in user's environment
+        raise NoTemplateFound(cls, template_variant)
 
     def model_dump_html(
         self,
         include: Container | None = None,
         exclude: Container | None = None,
+        template_variant: str | None = None,
         **kwargs: dict,
     ) -> str:
         """
-        Serialize this model to "safe" HTML. This default implementation assumes that a template
-        exists for this model in `Class.env` that can be used to serialize this model by it's top-
-        level fields, including computed fields and any other fields that should be included.
+        Render this model to "safe" HTML. This default implementation assumes that a template
+        exists for this model in `Class.quikui_environment` that can be used to serialize this
+        model by it's top-level fields, including computed fields and any other fields that should
+        be included.
 
         Args:
 
             include: Fields to include that would otherwise be skipped.
-            exclude: Fields that shold be skipped which would otherwise be included.
-            **kwargs: Any other modifiers you need to pass to serialization.
+            exclude: Fields that should be skipped which would otherwise be included.
+            template_variant (str | None): Template type (file extension) to find.
+                This allows the use of custom templates for different scenarios, such as
+                ``MyClass.list.html``. Defaults to finding normal ``MyClass.html`` templates.
+            **kwargs: Any other attributes you want to pass directly to Jinja2 template rendering.
 
-        ```note
+        Returns:
+            (str): The rendered "safe" HTML that FastAPI will insert directly into a Response for
+                this model.
+
+        ```{note}
         You can override this if you can directly return "safe" html without using a template.
         ```
 
-        ```warning
+        ```{warning}
         This only gets the top-level current values, any recursion will be done via templating to
         ensure Markup safety context is bubbled up correctly. So, we do not pass down the further
         recursive context from `include` or `exclude` kwargs.
@@ -250,6 +309,7 @@ class BaseComponent(BaseModel):
             exclude = set()
 
         model_dict = dict(
+            # NOTE: Ensure properties are in original form, not serialized
             (f, getattr(self, f))
             # NOTE: Ensure we get all public, computed, and any requested private fields...
             for f in chain(self.model_fields, self.model_computed_fields, include)
@@ -257,27 +317,30 @@ class BaseComponent(BaseModel):
             if f not in exclude
         )
 
-        attrs = self._attrs_.copy()
+        if attrs := self._quikui_extra_attributes:
+            model_dict["quikui_extra_attributes"] = attrs.model_dump()
 
-        if self._css_:
-            # NOTE: Not possible to set `class=...` in `Model(...)`, so this is fine
-            self._attrs_["class"] = self._css_.model_dump()
+        if css := self._quikui_css_classes:
+            model_dict["quikui_css_classes"] = css.model_dump()
 
-        if attrs:
-            model_dict["__extra_attrs__"] = attrs.model_dump()
-
-        model_dict["__component_name__"] = (
+        model_dict["__quikui_component_name__"] = (
             self.__quikui_component_name__ or self.__class__.__name__
         )
 
-        return self.template.render(**model_dict)
+        return self.quikui_template(template_variant=template_variant).render(
+            **model_dict
+        )
 
     def __html__(self) -> str:
         """
         Serialize this model to "safe" HTML, using default settings for field include/exclude.
         This should not be overriden, except to modify how `model_dump_html` gets called by Jinja2.
 
-        ```note
+        Returns:
+            (str): The rendered "safe" HTML that FastAPI will insert directly into a Response for
+                this model when using :func:`quikui.render_component`.
+
+        ```{note}
         This allows `BaseComponent` models to automatically serialize themselves as HTML when used
         in a Jinga2 template. We can include private fields for the template engine this way.
         ```
@@ -285,22 +348,35 @@ class BaseComponent(BaseModel):
         return self.model_dump_html()
 
 
-class Heading(BaseComponent):
-    content: str | BaseComponent
-    level: Annotated[int, Field(strict=True, ge=1, le=5)] = 1
+class Break(BaseComponent):
+    def model_dump_html(self, **kwargs) -> str:
+        return "<br>"
+
+
+class Image(BaseComponent):
+    source: str
+    alt_text: str
 
 
 class _SingleContentComponent(BaseComponent):
     content: str | BaseComponent
 
+    def __init__(self, content: str | BaseComponent = None, **kwargs):
+        # NOTE: Let's us do `cls(val)` instead of `cls(content=val)`
+        kwargs["content"] = content
+        super().__init__(**kwargs)
+
+
+class Heading(_SingleContentComponent):
+    level: Annotated[int, Field(strict=True, ge=1, le=5, exclude=True)] = 1
+
+    @property
+    def __quikui_component_name__(self) -> str:
+        return f"h{self.level}"
+
 
 class Paragraph(_SingleContentComponent):
     __quikui_component_name__ = "p"
-
-
-class Break(BaseComponent):
-    def model_dump_html(self, **kwargs) -> str:
-        return "<br>"
 
 
 class Anchor(_SingleContentComponent):
@@ -315,6 +391,18 @@ class Button(_SingleContentComponent):
 class _MultiItemComponent(BaseComponent):
     items: list[str | BaseComponent] = []
 
+    def __init__(self, *items, **kwargs):
+        # NOTE: Let's us do `cls(*vals)` instead of `cls(items=vals)`
+        if "items" not in kwargs:
+            kwargs["items"] = list(items)
+
+        elif len(items) > 0:
+            raise ValueError(
+                f"Cannot use `{self.__class__.__name__}(*items)` with `items=` kwarg."
+            )
+
+        super().__init__(**kwargs)
+
 
 class Div(_MultiItemComponent):
     pass
@@ -326,7 +414,6 @@ class Span(_MultiItemComponent):
 
 class ListItem(_SingleContentComponent):
     __quikui_component_name__ = "li"
-    content: str | BaseComponent
 
 
 class _ListComponent(_MultiItemComponent):
@@ -338,9 +425,9 @@ class _ListComponent(_MultiItemComponent):
     Usage example::
 
         >>> @app.get("/items")
-        >>> @qk.render_component()
+        >>> @qk.render_component(wrapper=qk.UnorderedList)  # What it returns in HTML mode
         >>> def get_items() -> list[MyItem]:  # What it returns in JSON mode
-        >>>     return qk.UnorderedList(items=session.exec(select(MyItem)).all())
+        >>>     return session.exec(select(MyItem)).all()  # `MyItem` subclasses `BaseComponent`
 
     ```note
     You can add a common set of css classes or attributes to the inner list items by specifying
@@ -349,8 +436,12 @@ class _ListComponent(_MultiItemComponent):
     ```
     """
 
-    item_css: CssClasses = Field(default_factory=CssClasses, exclude=True)
-    item_attributes: Attributes = Field(default_factory=Attributes, exclude=True)
+    item_css: CssClasses | Callable[[int, ListItem], None] = Field(
+        default_factory=CssClasses, exclude=True
+    )
+    item_attributes: Attributes | Callable[[int, ListItem], None] = Field(
+        default_factory=Attributes, exclude=True
+    )
     items: list[ListItem] = []
 
     @field_validator("items", mode="before")
@@ -361,16 +452,27 @@ class _ListComponent(_MultiItemComponent):
 
     @model_validator(mode="after")
     def add_item_css_and_attributes(self):
-        for item in self.items:
-            item._css_.update(self.item_css)
-            item._attr_.update(self.item_attributes)
-        return self
+        if isinstance(self.item_css, CssClasses):
 
-    @model_serializer()
-    def serialize_as_item_content(self):
-        # NOTE: This is so that when serializing this to dict/json,
-        #       it appears as if it were `List[inner]`
-        return [item.content for item in self.items]
+            def apply_css_to_item(_: int, item: ListItem):
+                item._quikui_css_classes.update(self.item_css)
+
+        else:
+            apply_css_to_item = self.item_css
+
+        if isinstance(self.item_attributes, Attributes):
+
+            def add_attributes_to_item(_: int, item: ListItem):
+                item._quikui_extra_attributes.update(self.item_attributes)
+
+        else:
+            add_attributes_to_item = self.item_attributes
+
+        for idx, item in enumerate(self.items):
+            apply_css_to_item(idx, item)
+            add_attributes_to_item(idx, item)
+
+        return self
 
 
 class UnorderedList(_ListComponent):
@@ -379,10 +481,6 @@ class UnorderedList(_ListComponent):
 
 class OrderedList(_ListComponent):
     __quikui_component_name__ = "ol"
-
-
-class Image(BaseComponent):
-    source: str
 
 
 class InputType(str, Enum):
@@ -419,11 +517,11 @@ class FormInput(BaseComponent):
 
     @model_validator(mode="after")
     def add_id_to_label(self):
-        if not (id := self._attrs_.get("id")):
-            id = self._attrs_["id"] = self.name
+        if not (id := self._quikui_extra_attributes.get("id")):
+            id = self._quikui_extra_attributes["id"] = self.name
 
         if self.label:
-            self.label._attrs_["for"] = id
+            self.label._quikui_extra_attributes["for"] = id
 
         return self
 

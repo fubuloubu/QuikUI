@@ -1,121 +1,110 @@
 from fastapi import FastAPI, Request, Form, Depends
+from fastapi.templating import Jinja2Templates
 from enum import Enum
-import quikui as qc
+import quikui as qk
 from pydantic import BaseModel, Field
+import random
 
 
 app = FastAPI()
 
-
-class CustomPage(qc.BaseComponent):
-    html_template_package = "example"
-
-    title: str
-    content: list[qc.BaseComponent]
+# You can use your existing the templates the same
+templates = Jinja2Templates(directory="example/templates")
 
 
-@app.get("/")
-@app.get("/index.html")
-@qc.render_component(html_only=True)
+# NOTE: It is recommended to exclude `html_only=True` routes from the schema
+@app.get("/", include_in_schema=False)
+@app.get("/index.html", include_in_schema=False)
+# In fact, `template=` is a nice way to render pages directly without needing a custom Component
+@qk.render_component(html_only=True, template="CustomPage.html", env=templates)
 async def index():
-    return CustomPage(
+    # NOTE: When using `template=`, you can just directly return a dict or BaseModel
+    return dict(
         title="Basic Demo App",
         content=[
-            qc.Div(
-                items=[
-                    qc.Heading(content="Basic Component Demo"),
-                    qc.Paragraph(content="This is a paragraph element."),
-                    qc.Div(
-                        # Can add custom CSS classes to any component via `css=...`
-                        css="my-3",
-                        items=[
-                            qc.Paragraph(content="This is a paragraph inside a div."),
-                            qc.Paragraph(
-                                content="This is another paragraph inside a div."
+            qk.Div(
+                qk.Heading("Basic Component Demo"),
+                qk.Paragraph("This is a paragraph element."),
+                qk.Div(
+                    qk.Paragraph("This is a paragraph inside a div."),
+                    qk.Paragraph("This is another paragraph inside a div."),
+                    qk.Paragraph(
+                        content=qk.Span(
+                            "This is a span ",
+                            qk.Anchor(
+                                "with a link",
+                                route="https://google.com",
+                                # You can add extra html attributes via kwargs
+                                target="_blank",  # NOTE: Open link in a new tab
                             ),
-                            qc.Paragraph(
-                                content=qc.Span(
-                                    items=[
-                                        "This is a span ",
-                                        qc.Anchor(
-                                            content="with a link",
-                                            route="https://google.com",
-                                            # You can add extra html attributes via kwargs
-                                            target="_blank",  # NOTE: Open link in a new tab
-                                        ),
-                                        " to something inside that same div.",
-                                    ]
-                                )
-                            ),
-                        ],
+                            " to something inside that same div.",
+                        )
                     ),
-                    qc.Paragraph(
-                        content=qc.Span(
-                            items=[
-                                "This is another span ",
-                                qc.Anchor(
-                                    content="with a link",
-                                    route="/another-page",
-                                ),
-                                " to another page, outside the div.",
-                            ]
+                    # Can add custom CSS classes to any component via `css=...`
+                    css="my-3",
+                ),
+                qk.Paragraph(
+                    qk.Span(
+                        "This is another span with a link",
+                        qk.Anchor(
+                            " to another page",
+                            route="/another-page",
                         ),
+                        ", outside the div.",
                     ),
-                ]
+                ),
             )
         ],
     )
 
 
 @app.get("/another-page")
-@qc.render_component(html_only=True)
+# NOTE: You can supply a template directly, but be aware it will not automatically update
+#       (Try modifying `CustomPage.html` and refreshing both this page and the previous)
+@qk.render_component(html_only=True, template=templates.get_template("CustomPage.html"))
 def another_page():
-    return CustomPage(
+    return dict(
         title="A page with dynamic content",
         content=[
-            qc.Heading(content="Using HTMX"),
-            qc.Paragraph(
-                content=(
-                    "This button uses HTMX to dynamically fetch content"
-                    " from the server using a GET request."
-                )
+            qk.Heading("Using HTMX"),
+            qk.Paragraph(
+                "This button uses HTMX to dynamically fetch content"
+                " from the server using a GET request."
             ),
-            qc.Button(
+            qk.Button(
+                "Get Dynamic Content",
                 # can also add extra attributes via `attrs=dict(...)` kwarg
                 # NOTE: This is useful for when attrs have `-` in them, or are protected keywords
                 attrs={"hx-get": "/dynamic", "type": "button", "hx-swap": "outerHTML"},
-                content="Get Dynamic Content",
             ),
-            qc.Button(
+            qk.Button(
+                "Get Form",
                 attrs={"hx-get": "/form", "type": "button", "hx-swap": "outerHTML"},
-                content="Get Form",
             ),
         ],
     )
 
 
 # NOTE: The components used do not have to be so fine-grained,
-class CustomComponent(qc.BaseComponent):
-    """To make a renderable component, just subclass this..."""
+class CustomComponent(qk.BaseComponent):
+    """To make a renderable component, just subclass BaseComponent"""
 
-    text: str = "Some random gibberish!"
-
-    def model_dump_html(self) -> str:
-        """...and implement this method"""
-        # NOTE: You do not have to subclass a component from the library, simply use whatever
-        #       components or templates you'd like to use to render your models
-        return qc.Paragraph(content=self.text).model_dump_html()
-
-    # NOTE: If you override `html_template_package` class variable with your own
+    # NOTE: If you override `quikui_template_package_name` class variable with your own
     #       package or app, and that contains a `/templates` folder that has a template
-    #       with the same name as this class, then it will "auto-render" using that template
-    #       without having to override `model_dump_html`
+    #       with the name of this class and the `.html` extension, then it will "auto-render"
+    quikui_template_package_name = "example"
+
+    # You can add whatever fields you'd like to your model
+    text: str = "Some random gibberish!"
 
 
 @app.get("/dynamic")
-@qc.render_component()  # NOTE: Allowed both w/ html and json response modes when `html_only=False`
+@qk.render_component()  # NOTE: Allows both w/ html and json response modes when `html_only=False`
 def dynamic_content():
-    return CustomComponent()
+    return [
+        CustomComponent(text=random.choice(["Select", "Dynamic", "Content"]))
+        for _ in range(random.randint(1, 10))
+    ]
 
 
 class CarTypes(Enum):
@@ -124,29 +113,30 @@ class CarTypes(Enum):
     DODGE = "Dodge"
 
 
-class CustomForm(qc.FormModel):
+# NOTE: This is not a component!
+class CustomForm(qk.FormModel):
     username: str = Field(
-        form_type=qc.TextInput,
+        form_type=qk.TextInput,
         form_attributes=dict(label="Username:", add_break=True),
     )
     email: str = Field(
-        form_type=qc.EmailInput,
+        form_type=qk.EmailInput,
         form_attributes=dict(label="Email:", add_break=True),
     )
     password: str = Field(
-        form_type=qc.PasswordInput,
+        form_type=qk.PasswordInput,
         form_attributes=dict(label="Password:", add_break=True),
     )
     save_password: bool = Field(
-        form_type=qc.CheckboxInput,
+        form_type=qk.CheckboxInput,
         form_attributes=dict(label="Save Password?"),
     )
     car_choice: CarTypes = Field(
-        form_type=qc.RadioInput,
+        form_type=qk.RadioInput,
         form_attributes=dict(label="First Choice:"),
     )
     backup_choice: CarTypes = Field(
-        form_type=qc.SelectionInput,
+        form_type=qk.SelectionInput,
         form_attributes=dict(
             label="Second Choice:",
             selected=CarTypes.NONE_SELECTED,
@@ -158,7 +148,7 @@ class CustomForm(qc.FormModel):
 
 
 @app.get("/form")
-@qc.render_component(html_only=True)  # NOTE: Only need this page to fetch the form
+@qk.render_component(html_only=True)  # NOTE: Only need this page to fetch the form
 def form_page():
     return CustomForm.create_form(
         id="a-form", form_attrs={"hx-post": "/completed-form"}
@@ -166,19 +156,15 @@ def form_page():
 
 
 @app.post("/completed-form")
-@qc.render_component(html_only=True)
-async def receive_form(form: CustomForm = Depends(qc.form_handler(CustomForm))):
-    return qc.Div(
-        items=[
-            qc.Paragraph(content="Form Data:"),
-            qc.UnorderedList(
-                # NOTE: You can give each item a uniform set of css/extra attrs via this:
-                item_css={"my-5"},
-                item_attributes=dict(something="else"),
-                items=[
-                    qc.Paragraph(content=f"{field}: {value}")
-                    for field, value in form.model_dump().items()
-                ],
-            ),
-        ]
-    )
+@qk.render_component(
+    # You can give a "wrapper" component to use for wrapping an iterable result in html render mode
+    wrapper=qk.UnorderedList,  # NOTE: By default uses `qk.Div`
+    # NOTE: Can add additional keyword arguments to initializing `wrapper`
+    wrapper_kwargs=dict(
+        item_css={"my-5"},
+        item_attributes=dict(something="else"),
+    ),
+)
+async def receive_form(form: CustomForm = Depends(qk.form_handler(CustomForm))):
+    # NOTE: The `form_handler` dependency will handle parsing and unflattening native HTML Forms
+    return [f"{field}: {value}" for field, value in form.model_dump().items()]

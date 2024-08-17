@@ -50,7 +50,7 @@ dev = [
 packages = [ "quikui" ]
 
 [tool.setuptools.package-data]
-templates = ['templates/*']
+quikui = ["py.typed", "templates/*"]
 
 [tool.setuptools_scm]
 # NOTE: Required to ensure that setuptools_scm functions properly
