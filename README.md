@@ -35,7 +35,7 @@ import quikui as qk
 
 
 class Component(qk.BaseComponent):
-    html_template_package = "your_package_name"
+    quikui_template_package_name = "your_package_name"
     # a folder called `templates/` under this package should contain your html templates
 
 
@@ -54,15 +54,15 @@ Then it is expected to have a file under your package's template directory named
 
 ```html
 {# This is a Jinj2 template #}
-{{ __component_name__ }} {{ __extra_attrs__ }}
+<{{ __quikui_component_name__ }} class="{{ quikui_css_classes }}" {{ quikui_extra_attributes }}>
   {{ a_field }}
 ...
 ```
 
 The template can use any named field of your model (the type is not converted, so handle
-accordingly), or it can the QuikUI-provided fields `__component_name__` (the name of the model e.g.
-`MyModel`) and `__extra_attrs__` (which is a rendered "safe" string of html attributes in `k="v"`
-format, including the `class` attribute).
+accordingly), or it can the QuikUI-provided fields `__quikui_component_name__` (the name of the model e.g.
+`MyModel`), `quikui_css_classes` (which is the set of CSS classes that should be added),
+and `quikui_extra_attributes` (which is a rendered "safe" string of html attributes in `k="v"` format, including the `class` attribute).
 
 Additionally, there are two extra fields that are injected into your model when subclassing (which
 are hidden from your model export via `model_dump` and `model_dump_json`) that you should use to
