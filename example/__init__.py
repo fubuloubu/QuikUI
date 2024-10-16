@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Request, Form, Depends
-from fastapi.templating import Jinja2Templates
-from enum import Enum
-import quikui as qk
-from pydantic import BaseModel, Field
 import random
+from enum import Enum
 
+import quikui as qk
+from fastapi import Depends, FastAPI, Form, Request
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 
 app = FastAPI()
 
@@ -150,7 +150,9 @@ class CustomForm(qk.FormModel):
 @app.get("/form")
 @qk.render_component(html_only=True)  # NOTE: Only need this page to fetch the form
 def form_page():
-    return CustomForm.create_form(id="a-form", form_attrs={"hx-post": "/completed-form"})
+    return CustomForm.create_form(
+        id="a-form", form_attrs={"hx-post": "/completed-form"}
+    )
 
 
 @app.post("/completed-form")

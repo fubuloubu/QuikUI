@@ -1,16 +1,13 @@
 import inspect
 from asyncio import iscoroutinefunction
 from collections.abc import Callable, Mapping
-from typing import Any, cast, Annotated, Coroutine
-from typing import ParamSpec, Protocol, TypeVar
+from typing import (Any, cast)
 
-from fastapi import Request, Response
-
-
-from fastapi import Response, Request, Header, Depends
+from fastapi import Response
 from fastapi.concurrency import run_in_threadpool
+from starlette.datastructures import FormData
 
-from .types import P, T, MaybeAsyncFunc
+from .types import MaybeAsyncFunc, P, T
 
 
 def append_to_signature(func: Callable, *params: inspect.Parameter) -> Callable:
@@ -66,3 +63,7 @@ def get_response(kwargs: Mapping[str, Any]) -> Response | None:
             return val
 
     return None
+
+
+def unflatten(form_data: FormData) -> dict:
+    return {key: value for key, value in form_data.items()}
