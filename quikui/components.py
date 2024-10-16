@@ -165,11 +165,12 @@ class BaseComponent(BaseModel):
     __quikui_component_name__: ClassVar[str | None] = None
     """To override the value of ``__quikui_component_name__`` when rendering the component."""
 
-    __quikui_css_classes__: CssClasses
+    _quikui_css_classes: CssClasses = PrivateAttr(default_factory=CssClasses)
     """Add extra CSS classes to this component. Useful for integration with your design system."""
 
-    __quikui_extra_attributes__: Attributes
-    """Add extra attributes to this component. Exposed to template rendering."""
+    _quikui_extra_attributes: Attributes = PrivateAttr(default_factory=Attributes)
+    """Add extra attributes to this component. Exposed to template rendering as
+    ``__extra_attrs__``."""
 
     # NOTE: Needed to fetch extra kwargs to models (will be discarded in `__init__`)
     __pydantic_extra__: dict[str, Any] = {}
@@ -181,8 +182,7 @@ class BaseComponent(BaseModel):
             self.parse_css_and_attrs()
             return self
 
-        else:
-            return cls.model_validate(kwargs)
+        self._quikui_css_classes = CssClasses(css)
 
     @model_validator(mode="after")
     def parse_css_and_attrs(self):
@@ -200,6 +200,7 @@ class BaseComponent(BaseModel):
         else:
             self.__quikui_extra_attributes__ = Attributes()
 
+        self._quikui_extra_attributes = Attributes(attrs)
         self.__pydantic_extra__ = {}  # Remove extras
 
         return self
@@ -329,10 +330,10 @@ class BaseComponent(BaseModel):
             if f not in exclude
         )
 
-        if attrs := self.__quikui_extra_attributes__:
+        if attrs := self._quikui_extra_attributes:
             model_dict["quikui_extra_attributes"] = attrs.model_dump()
 
-        if css := self.__quikui_css_classes__:
+        if css := self._quikui_css_classes:
             model_dict["quikui_css_classes"] = css.model_dump()
 
         model_dict["__quikui_component_name__"] = (
@@ -471,7 +472,7 @@ class _ListComponent(_MultiItemComponent):
         if isinstance(self.item_css, CssClasses):
 
             def apply_css_to_item(_: int, item: ListItem):
-                item.__quikui_css_classes__.update(self.item_css)
+                item._quikui_css_classes.update(self.item_css)
 
         else:
             apply_css_to_item = self.item_css
@@ -479,7 +480,7 @@ class _ListComponent(_MultiItemComponent):
         if isinstance(self.item_attributes, Attributes):
 
             def add_attributes_to_item(_: int, item: ListItem):
-                item.__quikui_extra_attributes__.update(self.item_attributes)
+                item._quikui_extra_attributes.update(self.item_attributes)
 
         else:
             add_attributes_to_item = self.item_attributes
@@ -533,11 +534,11 @@ class FormInput(BaseComponent):
 
     @model_validator(mode="after")
     def add_id_to_label(self):
-        if not (id := self.__quikui_extra_attributes__.get("id")):
-            id = self.__quikui_extra_attributes__["id"] = self.name
+        if not (id := self._quikui_extra_attributes.get("id")):
+            id = self._quikui_extra_attributes["id"] = self.name
 
         if self.label:
-            self.label.__quikui_extra_attributes__["for"] = id
+            self.label._quikui_extra_attributes["for"] = id
 
         return self
 
