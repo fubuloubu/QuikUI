@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Request, Form, Depends
-from fastapi.templating import Jinja2Templates
-from enum import Enum
-import quikui as qk
-from pydantic import BaseModel, Field
 import random
+from enum import Enum
 
+import quikui as qk
+from fastapi import Depends, FastAPI, Form, Request
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 
 app = FastAPI()
 
@@ -165,6 +165,6 @@ def form_page():
         item_attributes=dict(something="else"),
     ),
 )
-async def receive_form(form: CustomForm = Depends(qk.form_handler(CustomForm))):
+async def receive_form(form: CustomForm = Depends(CustomForm.as_form)):
     # NOTE: The `form_handler` dependency will handle parsing and unflattening native HTML Forms
     return [f"{field}: {value}" for field, value in form.model_dump().items()]

@@ -15,14 +15,6 @@
       crossorigin="anonymous">
 
     {% block header %} {% endblock %}
-  </head>
-
-  <body class="d-flex flex-column h-100">
-    <main class="flex-shrink-0">
-      <div class="container py-5">
-        {% block content %} {% endblock content %}
-      </div>
-    </main>
 
     {# You can use any design system you want #}
     <script
@@ -39,6 +31,14 @@
     </script>
 
     {% block script %} {% endblock script %}
+  </head>
+
+  <body class="d-flex flex-column h-100">
+    <main class="flex-shrink-0">
+      <div class="container py-5">
+        {% block content %} {% endblock content %}
+      </div>
+    </main>
   </body>
 
 </html>
