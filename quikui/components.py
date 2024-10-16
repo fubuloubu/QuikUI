@@ -78,9 +78,7 @@ class CssClasses(RootModel):
 
     @model_validator(mode="after")
     def validate_markup_safe(self):
-        assert all(
-            set(item).issubset(VALID_ATTR_CHARS) for item in self.root
-        ), "Not in spec"
+        assert all(set(item).issubset(VALID_ATTR_CHARS) for item in self.root), "Not in spec"
         return self
 
     @model_serializer()
@@ -111,9 +109,7 @@ class Attributes(RootModel):
 
     @model_validator(mode="after")
     def validate_markup_safe(self):
-        assert all(
-            set(key).issubset(VALID_ATTR_CHARS) for key in self.root
-        ), "Not in spec"
+        assert all(set(key).issubset(VALID_ATTR_CHARS) for key in self.root), "Not in spec"
         assert all(
             set(value).issubset(set(string.printable)) for value in self.root.values()
         ), "Not in spec"
@@ -414,9 +410,7 @@ class _MultiItemComponent(BaseComponent):
             kwargs["items"] = list(items)
 
         elif len(items) > 0:
-            raise ValueError(
-                f"Cannot use `{self.__class__.__name__}(*items)` with `items=` kwarg."
-            )
+            raise ValueError(f"Cannot use `{self.__class__.__name__}(*items)` with `items=` kwarg.")
 
         super().__init__(**kwargs)
 
@@ -463,9 +457,7 @@ class _ListComponent(_MultiItemComponent):
 
     @field_validator("items", mode="before")
     def add_li_if_missing(cls, items: list[str | BaseComponent]) -> list[ListItem]:
-        return [
-            ListItem(content=i) if not isinstance(i, ListItem) else i for i in items
-        ]
+        return [ListItem(content=i) if not isinstance(i, ListItem) else i for i in items]
 
     @model_validator(mode="after")
     def add_item_css_and_attributes(self):

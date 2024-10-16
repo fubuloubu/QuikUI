@@ -104,7 +104,6 @@ def render_component(
             return template  # type is `Template | None`
 
     def decorator(func: MaybeAsyncFunc[P, T]) -> FastApiHandler:
-
         @wraps(func)
         async def wrapper_render_if_html_requested(
             *args: P.args,
@@ -123,13 +122,9 @@ def render_component(
 
             # NOTE: Dependency resolves to a `Request` if we've made it this far
             request = __html_request
-            if (response_template := get_template()) and isinstance(
-                result, (BaseModel, dict)
-            ):
+            if (response_template := get_template()) and isinstance(result, (BaseModel, dict)):
                 result = response_template.render(
-                    **(
-                        result.model_dump() if isinstance(result, BaseModel) else result
-                    ),
+                    **(result.model_dump() if isinstance(result, BaseModel) else result),
                     request=request,
                     url_for=request.url_for,
                 )
