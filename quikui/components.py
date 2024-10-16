@@ -165,35 +165,44 @@ class BaseComponent(BaseModel):
     __quikui_component_name__: ClassVar[str | None] = None
     """To override the value of ``__quikui_component_name__`` when rendering the component."""
 
-    _quikui_css_classes: CssClasses = PrivateAttr(default_factory=CssClasses)
+    __quikui_css_classes__: CssClasses
     """Add extra CSS classes to this component. Useful for integration with your design system."""
 
-    _quikui_extra_attributes: Attributes = PrivateAttr(default_factory=Attributes)
-    """Add extra attributes to this component. Exposed to template rendering as
-    ``__extra_attrs__``."""
+    __quikui_extra_attributes__: Attributes
+    """Add extra attributes to this component. Exposed to template rendering."""
 
     # NOTE: Needed to fetch extra kwargs to models (will be discarded in `__init__`)
-    __pydantic_extra__: Dict[str, str | bool]
+    __pydantic_extra__: dict[str, Any] = {}
     model_config = ConfigDict(extra="allow")
 
-    def __init__(
-        self,
-        css: Iterable[str] = None,
-        attrs: Dict[str, str | bool] = None,
-        **model_fields,
-    ):
-        super().__init__(**model_fields)
+    def __new__(cls, *args, **kwargs):
+        if "SQLModel" in map(lambda base: base.__name__, cls.__mro__):
+            self = super().__new__(cls, *args, **kwargs)
+            self.parse_css_and_attrs()
+            return self
 
-        self._quikui_css_classes = CssClasses(css)
+        else:
+            return cls.model_validate(kwargs)
 
-        if attrs is None:
-            attrs = dict()
+    @model_validator(mode="after")
+    def parse_css_and_attrs(self):
+        self.__quikui_css_classes__ = (
+            CssClasses(root=self.__pydantic_extra__.pop("css", set()))
+            if self.__pydantic_extra__
+            else CssClasses()
+        )
 
         if self.__pydantic_extra__:
+            attrs = self.__pydantic_extra__.pop("attrs", dict())
             attrs.update(self.__pydantic_extra__)
+            self.__quikui_extra_attributes__ = Attributes(root=attrs)
 
-        self._quikui_extra_attributes = Attributes(attrs)
-        self.__pydantic_extra__ = {}
+        else:
+            self.__quikui_extra_attributes__ = Attributes()
+
+        self.__pydantic_extra__ = {}  # Remove extras
+
+        return self
 
     @classmethod
     @cache
@@ -261,6 +270,7 @@ class BaseComponent(BaseModel):
             except Jinja2TemplateNotFound:
                 # If no template is found, recurse up the class heirarchy through `.__base__`
                 # NOTE: Potentially dangerous if multi-class heirarchy exists, only uses first base
+                assert template_class.__base__  # NOTE: For mypy
                 template_class = template_class.__base__
 
         # NOTE: If we get to BaseComponent, there was some error in user's environment
@@ -271,6 +281,7 @@ class BaseComponent(BaseModel):
         include: Container | None = None,
         exclude: Container | None = None,
         template_variant: str | None = None,
+        render_context: dict | None = None,
         **kwargs: dict,
     ) -> str:
         """
@@ -286,6 +297,7 @@ class BaseComponent(BaseModel):
             template_variant (str | None): Template type (file extension) to find.
                 This allows the use of custom templates for different scenarios, such as
                 ``MyClass.list.html``. Defaults to finding normal ``MyClass.html`` templates.
+            render_context (dict | None): Extra context to pass to ``.quikui_template(...).render``
             **kwargs: Any other attributes you want to pass directly to Jinja2 template rendering.
 
         Returns:
@@ -317,18 +329,22 @@ class BaseComponent(BaseModel):
             if f not in exclude
         )
 
-        if attrs := self._quikui_extra_attributes:
+        if attrs := self.__quikui_extra_attributes__:
             model_dict["quikui_extra_attributes"] = attrs.model_dump()
 
-        if css := self._quikui_css_classes:
+        if css := self.__quikui_css_classes__:
             model_dict["quikui_css_classes"] = css.model_dump()
 
         model_dict["__quikui_component_name__"] = (
             self.__quikui_component_name__ or self.__class__.__name__
         )
 
+        # NOTE: Feed the rest of the kwargs to this function directly to the template rendering
+        model_dict.update(kwargs)
+
         return self.quikui_template(template_variant=template_variant).render(
-            **model_dict
+            **model_dict,
+            **(render_context or {}),
         )
 
     def __html__(self) -> str:
@@ -455,7 +471,7 @@ class _ListComponent(_MultiItemComponent):
         if isinstance(self.item_css, CssClasses):
 
             def apply_css_to_item(_: int, item: ListItem):
-                item._quikui_css_classes.update(self.item_css)
+                item.__quikui_css_classes__.update(self.item_css)
 
         else:
             apply_css_to_item = self.item_css
@@ -463,7 +479,7 @@ class _ListComponent(_MultiItemComponent):
         if isinstance(self.item_attributes, Attributes):
 
             def add_attributes_to_item(_: int, item: ListItem):
-                item._quikui_extra_attributes.update(self.item_attributes)
+                item.__quikui_extra_attributes__.update(self.item_attributes)
 
         else:
             add_attributes_to_item = self.item_attributes
@@ -517,11 +533,11 @@ class FormInput(BaseComponent):
 
     @model_validator(mode="after")
     def add_id_to_label(self):
-        if not (id := self._quikui_extra_attributes.get("id")):
-            id = self._quikui_extra_attributes["id"] = self.name
+        if not (id := self.__quikui_extra_attributes__.get("id")):
+            id = self.__quikui_extra_attributes__["id"] = self.name
 
         if self.label:
-            self.label._quikui_extra_attributes["for"] = id
+            self.label.__quikui_extra_attributes__["for"] = id
 
         return self
 
