@@ -5,19 +5,11 @@ from typing import (
     Any,
     ClassVar,
     Callable,
-    Coroutine,
     get_args,
-    GenericAlias,
-    _GenericAlias,
     Iterable,
     types,
 )
-from fastapi import (
-    Depends,
-    Header,
-    Request,
-    Response,
-)
+from fastapi import Depends, Header, Request, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.dependencies.utils import get_typed_return_annotation
 from fastapi.responses import HTMLResponse
@@ -25,16 +17,10 @@ from jinja2 import Template, Environment
 from pydantic import BaseModel
 
 from .components import BaseComponent, Div
+from .dependencies import QkVariant, RequestIfHtmlResponseNeeded
 from .exceptions import HtmlResponseOnly, ResponseNotRenderable
-from .utils import (
-    DependsHtmlResponse,
-    append_to_signature,
-    execute_maybe_sync_func,
-    MaybeAsyncFunc,
-    P,
-    T,
-    get_response,
-)
+from .types import P, T, MaybeAsyncFunc, FastApiHandler, FastApiDecorator
+from .utils import append_to_signature, execute_maybe_sync_func, get_response
 
 
 def render_component(
@@ -43,7 +29,7 @@ def render_component(
     env: Environment | Jinja2Templates | None = None,
     wrapper: Callable[[Iterable[BaseComponent]], BaseComponent] | None = None,
     wrapper_kwargs: dict | None = None,
-) -> Callable[[MaybeAsyncFunc[P, T]], Callable[P, Coroutine[None, None, T | Response]]]:
+) -> FastApiDecorator:
     """
     A decorator that should be used to automatically render an instance or sequence of
     :class:`~quikui.BaseComponent` subclass(es) into an :class:`~fastapi.responses.HTMLResponse`
@@ -117,30 +103,35 @@ def render_component(
         def get_template():
             return template  # type is `Template | None`
 
-    def decorator(
-        func: MaybeAsyncFunc[P, T],
-    ) -> Callable[P, Coroutine[None, None, T | Response]]:
+    def decorator(func: MaybeAsyncFunc[P, T]) -> FastApiHandler:
 
         @wraps(func)
         async def wrapper_render_if_html_requested(
             *args: P.args,
-            __html_response_requested: DependsHtmlResponse,
+            __html_request: RequestIfHtmlResponseNeeded,
+            qk_variant: QkVariant = None,
             **kwargs: P.kwargs,
         ) -> T | Response:
-            if html_only and __html_response_requested is None:
+            if html_only and __html_request is None:
                 raise HtmlResponseOnly()
 
             result = await execute_maybe_sync_func(func, *args, **kwargs)
             # NOTE: Short-circut to return response directly if our heuristic fails,
             #       or a user decides to return a direct Response object (bypassing our logic)
-            if __html_response_requested is None or isinstance(result, Response):
+            if __html_request is None or isinstance(result, Response):
                 return result
 
+            # NOTE: Dependency resolves to a `Request` if we've made it this far
+            request = __html_request
             if (response_template := get_template()) and isinstance(
                 result, (BaseModel, dict)
             ):
                 result = response_template.render(
-                    **(result.model_dump() if isinstance(result, BaseModel) else result)
+                    **(
+                        result.model_dump() if isinstance(result, BaseModel) else result
+                    ),
+                    request=request,
+                    url_for=request.url_for,
                 )
 
             elif (
@@ -148,10 +139,12 @@ def render_component(
                 and isinstance(result, (tuple, list))
                 and all(isinstance(r, (BaseModel, dict)) for r in result)
             ):
-                result = (wrapper if wrapper else Div)(
+                result = (wrapper if wrapper else Div)(  # type: ignore[operator]
                     *(
                         response_template.render(
-                            **(r.model_dump() if isinstance(r, BaseModel) else r)
+                            **(r.model_dump() if isinstance(r, BaseModel) else r),
+                            request=request,
+                            url_for=request.url_for,
                         )
                         for r in result
                     ),
@@ -161,7 +154,7 @@ def render_component(
             elif isinstance(result, (tuple, list)) and all(
                 isinstance(r, (BaseComponent, str)) for r in result
             ):
-                result = (wrapper if wrapper else Div)(
+                result = (wrapper if wrapper else Div)(  # type: ignore[operator]
                     *result,
                     **(wrapper_kwargs or {}),
                 )
@@ -172,7 +165,10 @@ def render_component(
 
             # NOTE: Needs `result` after processing
             if isinstance(result, BaseComponent):
-                result = result.__html__()  # NOTE: `__html__` is suggested for defaults
+                result = result.model_dump_html(  # type: ignore[assignment]
+                    template_variant=qk_variant,
+                    render_context=dict(request=request, url_for=request.url_for),
+                )
 
             # else: `result` is assumed to be HTML str now (NOTE: could be unsafe)
 
@@ -186,9 +182,15 @@ def render_component(
         return append_to_signature(
             wrapper_render_if_html_requested,
             inspect.Parameter(
-                "__html_response_requested",
+                "__html_request",
                 inspect.Parameter.KEYWORD_ONLY,
-                annotation=DependsHtmlResponse,
+                annotation=RequestIfHtmlResponseNeeded,
+            ),
+            inspect.Parameter(
+                "qk_variant",
+                inspect.Parameter.KEYWORD_ONLY,
+                annotation=QkVariant,
+                default=None,
             ),
         )
 

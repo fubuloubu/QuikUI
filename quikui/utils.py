@@ -10,37 +10,7 @@ from fastapi import Request, Response
 from fastapi import Response, Request, Header, Depends
 from fastapi.concurrency import run_in_threadpool
 
-P = ParamSpec("P")
-T = TypeVar("T")
-MaybeAsyncFunc = Callable[P, T] | Callable[P, Coroutine[Any, Any, T]]
-
-
-def html_response_requested(
-    request: Request,
-    hx_request: Annotated[bool, Header()] = False,
-    content_type: Annotated[str | None, Header()] = None,
-    raw_accept_header: Annotated[str | None, Header(alias="accept")] = None,
-) -> Request | None:
-    if hx_request:
-        # We definitely know that HX-Request=true headers means return html
-        return request
-
-    elif content_type and content_type == "application/json":
-        # Assume that if the request is JSON, the response should be too
-        # NOTE: htmx never does this
-        return None
-
-    elif raw_accept_header and (
-        accepted_types := list(t.strip() for t in raw_accept_header.split(","))
-    ):
-        if any(t.startswith("text/html") for t in accepted_types):
-            return request  # We have determined this is expecting HTML back
-
-    # else: We haven't determined (according to above heuristics) that HTML is requested
-    return None
-
-
-DependsHtmlResponse = Annotated[Request | None, Depends(html_response_requested)]
+from .types import P, T, MaybeAsyncFunc
 
 
 def append_to_signature(func: Callable, *params: inspect.Parameter) -> Callable:

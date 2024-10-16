@@ -1,27 +1,49 @@
-from typing import Callable, Type, TYPE_CHECKING
-from pydantic import ValidationError
-from fastapi import Request, Depends
-from starlette.datastructures import FormData
-from fastapi.exceptions import RequestValidationError
-
-if TYPE_CHECKING:
-    from .components import FormModel
+from typing import Annotated
+from pydantic import BaseModel, ValidationError
+from fastapi import Request, Depends, Header
 
 
-def unflatten(form_data: FormData) -> dict:
-    return {key: value for key, value in form_data.items()}
+# HTMX Headers
+HxRequest = Annotated[bool, Header(include_in_schema=False)]
+# QuikUI Headers (this library)
+QkVariant = Annotated[str | None, Header(include_in_schema=False)]
 
 
-def form_handler(Model: Type["FormModel"]):
-    async def handle_request(request: Request) -> "FormModel":
-        async with request.form() as form_data:
-            model_data = unflatten(form_data)
+def request_if_html_response_needed(
+    request: Request,
+    # Header fields to detect with
+    accept: Annotated[str | None, Header(include_in_schema=False)] = None,
+    content_type: Annotated[str | None, Header(include_in_schema=False)] = None,
+    hx_request: HxRequest = False,
+    qk_variant: QkVariant = None,
+) -> Request | None:
+    """
+    FastAPI dependency to detect if an ``HTMLResponse`` should be given to ``request``.
+    Uses a serious of Header-based heuristics to determine if required.
 
-        try:
-            return Model.model_validate(model_data)
-        except ValidationError as e:
-            raise RequestValidationError(
-                e.errors(include_input=True, include_url=True, include_context=True)
-            )
+    Returns:
+        (Request | None): feedsback the request it was given if the detection triggers.
+            Defaults to None (no HTML Request detected).
+    """
+    if hx_request or qk_variant:
+        # We definitely know if any of these headers are present, it means respond w/ html
+        return request
 
-    return handle_request
+    elif content_type == "application/json":
+        # Assume that if the request is JSON, the response should be too
+        # NOTE: htmx never does this
+        return None
+
+    elif accept is not None and (
+        accepted_types := list(t.strip() for t in accept.split(","))
+    ):
+        if any(t.startswith("text/html") for t in accepted_types):
+            return request  # We have determined this is expecting HTML back
+
+    # else: We haven't determined (according to above heuristics) that HTML is requested
+    return None
+
+
+RequestIfHtmlResponseNeeded = Annotated[
+    Request | None, Depends(request_if_html_response_needed)
+]
