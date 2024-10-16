@@ -150,9 +150,7 @@ class CustomForm(qk.FormModel):
 @app.get("/form")
 @qk.render_component(html_only=True)  # NOTE: Only need this page to fetch the form
 def form_page():
-    return CustomForm.create_form(
-        id="a-form", form_attrs={"hx-post": "/completed-form"}
-    )
+    return CustomForm.create_form(id="a-form", form_attrs={"hx-post": "/completed-form"})
 
 
 @app.post("/completed-form")
@@ -165,6 +163,6 @@ def form_page():
         item_attributes=dict(something="else"),
     ),
 )
-async def receive_form(form: CustomForm = Depends(qk.form_handler(CustomForm))):
+async def receive_form(form: CustomForm = Depends(CustomForm.as_form)):
     # NOTE: The `form_handler` dependency will handle parsing and unflattening native HTML Forms
     return [f"{field}: {value}" for field, value in form.model_dump().items()]
