@@ -177,6 +177,32 @@ async def receive_form(form: CustomForm = Depends(CustomForm.as_form)):
     return [f"{field}: {value}" for field, value in form.model_dump().items()]
 
 
+class Datapoint(Component):
+    time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    data: float = Field(default_factory=random.random)
+
+
+data: list[Datapoint] = list()
+
+
+@app.get("/dashboard")
+@qk.render_component(html_only=True, template=templates.get_template("Dashboard.html"))
+async def dashboard():
+    return dict(data=data)
+
+
+@app.get("/stream-data")
+# NOTE: Use `streaming=True` to encode the result as a StreamingResponse (using SSE EventSource for HTML)
+@qk.render_component(streaming=True)
+# NOTE: QuikUI handles the conversion to SSE-compatible streaming e.g. `data:{{ html }}\n\n`
+async def stream_live_data() -> "Datapoint":
+    while True:
+        await asyncio.sleep(0.25)
+        pt = Datapoint()
+        data.append(pt)
+        yield pt
+
+
 class Notification(Component):
     msg: str
 
