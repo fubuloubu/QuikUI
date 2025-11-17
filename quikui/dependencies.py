@@ -1,5 +1,4 @@
 from typing import Annotated
-from pydantic import BaseModel, ValidationError
 from fastapi import Request, Depends, Header
 
 
@@ -34,7 +33,19 @@ def request_if_html_response_needed(
         # NOTE: htmx never does this
         return None
 
-    elif accept is not None and (accepted_types := list(t.strip() for t in accept.split(","))):
+    elif content_type == "application/jsonl":
+        # Assume that if the request is JSONL,
+        # the response should be streamed newline-delimited JSON
+        # NOTE: htmx never does this
+        return None
+
+    elif accept == "text/event-stream":
+        # Assume this is a browser-based SSE streaming call
+        return request
+
+    elif accept is not None and (
+        accepted_types := list(t.strip() for t in accept.split(","))
+    ):
         if any(t.startswith("text/html") for t in accepted_types):
             return request  # We have determined this is expecting HTML back
 
@@ -42,4 +53,6 @@ def request_if_html_response_needed(
     return None
 
 
-RequestIfHtmlResponseNeeded = Annotated[Request | None, Depends(request_if_html_response_needed)]
+RequestIfHtmlResponseNeeded = Annotated[
+    Request | None, Depends(request_if_html_response_needed)
+]

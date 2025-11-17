@@ -1,7 +1,7 @@
 import inspect
 from asyncio import iscoroutinefunction
 from collections.abc import Callable, Mapping
-from typing import (Any, cast)
+from typing import Any, cast
 
 from fastapi import Response
 from fastapi.concurrency import run_in_threadpool
@@ -45,7 +45,10 @@ async def execute_maybe_sync_func(
         *args: Positional arguments to pass to the function.
         **kwargs: Keyword arguments to pass to the function.
     """
-    if iscoroutinefunction(func):
+    if inspect.isasyncgenfunction(func):
+        return func(*args, **kwargs)
+
+    elif iscoroutinefunction(func):
         return await func(*args, **kwargs)  # type: ignore[no-any-return]
 
     return await run_in_threadpool(cast(Callable[P, T], func), *args, **kwargs)

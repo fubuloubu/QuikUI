@@ -1,26 +1,20 @@
-from functools import wraps, partial
 import inspect
-from typing import (
-    Annotated,
-    Any,
-    ClassVar,
-    Callable,
-    get_args,
-    Iterable,
-    types,
-)
-from fastapi import Depends, Header, Request, Response
+from functools import wraps
+from typing import Callable, Iterable
+from collections.abc import AsyncGenerator, Generator
+
+from fastapi import Response
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.dependencies.utils import get_typed_return_annotation
-from fastapi.responses import HTMLResponse
-from jinja2 import Template, Environment
+from jinja2 import Environment, Template
 from pydantic import BaseModel
 
 from .components import BaseComponent, Div
 from .dependencies import QkVariant, RequestIfHtmlResponseNeeded
 from .exceptions import HtmlResponseOnly, ResponseNotRenderable
-from .types import P, T, MaybeAsyncFunc, FastApiHandler, FastApiDecorator
+from .types import FastApiDecorator, FastApiHandler, MaybeAsyncFunc, P, T
 from .utils import append_to_signature, execute_maybe_sync_func, get_response
+from .sse import EventStream
 
 
 def render_component(
@@ -29,6 +23,7 @@ def render_component(
     env: Environment | Jinja2Templates | None = None,
     wrapper: Callable[[Iterable[BaseComponent]], BaseComponent] | None = None,
     wrapper_kwargs: dict | None = None,
+    streaming: bool = False,
 ) -> FastApiDecorator:
     """
     A decorator that should be used to automatically render an instance or sequence of
@@ -77,7 +72,6 @@ def render_component(
         >>> def get_something():
         >>>     return instance_of_basecomponent_subclass  # Automatically converted to HTMLResponse
 
-
     ```{warning}
     If using the ``template`` keyword argument, please note that the result model is dumped using
     the normal Pydantic `.model_dump` method and therefore will not contain any extra attributes
@@ -114,21 +108,52 @@ def render_component(
             if html_only and __html_request is None:
                 raise HtmlResponseOnly()
 
-            result = await execute_maybe_sync_func(func, *args, **kwargs)
-            # NOTE: Short-circut to return response directly if our heuristic fails,
-            #       or a user decides to return a direct Response object (bypassing our logic)
-            if __html_request is None or isinstance(result, Response):
+            # NOTE: Short-circut to return response directly if user returns one
+            if isinstance(
+                result := await execute_maybe_sync_func(func, *args, **kwargs),
+                Response,
+            ):
                 return result
+
+            elif __html_request is None:
+                # NOTE: Fallback on FastAPI-native processing of models if not rendering HTML
+
+                if not streaming:
+                    return result
+
+                elif isinstance(result, AsyncGenerator):
+                    model_iter = (
+                        item.model_dump_json() + "\n" async for item in result
+                    )
+
+                elif isinstance(result, Generator):
+                    model_iter = (item.model_dump_json() + "\n" for item in result)
+
+                else:
+                    raise RuntimeError(f"{type(result)} is not iter/aiter.")
+
+                return StreamingResponse(
+                    model_iter,
+                    # NOTE: Content is encoded as newline-delimited JSON
+                    headers={"Content-Type": "application/jsonl"},
+                )
 
             # NOTE: Dependency resolves to a `Request` if we've made it this far
             request = __html_request
-            if (response_template := get_template()) and isinstance(result, (BaseModel, dict)):
+
+            # Render model as HTML using Template
+            if (response_template := get_template()) and isinstance(
+                result, (BaseModel, dict)
+            ):
                 result = response_template.render(
-                    **(result.model_dump() if isinstance(result, BaseModel) else result),
+                    **(
+                        result.model_dump() if isinstance(result, BaseModel) else result
+                    ),
                     request=request,
                     url_for=request.url_for,
                 )
 
+            # Render sequence of models as HTML using Template, wrapped in another element
             elif (
                 response_template
                 and isinstance(result, (tuple, list))
@@ -146,6 +171,7 @@ def render_component(
                     **(wrapper_kwargs or {}),
                 )
 
+            # Wrap sequence of models into another element to process further
             elif isinstance(result, (tuple, list)) and all(
                 isinstance(r, (BaseComponent, str)) for r in result
             ):
@@ -154,11 +180,45 @@ def render_component(
                     **(wrapper_kwargs or {}),
                 )
 
+            # Assume sequence of models is a generator,
+            # and stream response (rendering each model as HTML)
+            elif streaming:
+                if isinstance(result, AsyncGenerator):
+                    model_iter = (
+                        item.model_dump_html(  # type: ignore[assignment]
+                            template_variant=qk_variant,
+                            render_context=dict(
+                                request=request, url_for=request.url_for
+                            ),
+                        )
+                        async for item in result
+                    )
+
+                elif isinstance(result, Generator):
+                    model_iter = (
+                        item.model_dump_html(  # type: ignore[assignment]
+                            template_variant=qk_variant,
+                            render_context=dict(
+                                request=request, url_for=request.url_for
+                            ),
+                        )
+                        for item in result
+                    )
+
+                else:
+                    raise RuntimeError(f"{type(result)} is not iter/aiter.")
+
+                return StreamingResponse(
+                    EventStream(model_iter),
+                    headers={"Content-Type": "text/event-stream"},
+                )
+
+            # Raise if we can't handle the rest of this
             elif not isinstance(result, (BaseComponent, str)):
                 # NOTE: Should not happen if library is used properly
                 raise ResponseNotRenderable(result)
 
-            # NOTE: Needs `result` after processing
+            # We have a model to render to HTML (or converted to one above)
             if isinstance(result, BaseComponent):
                 result = result.model_dump_html(  # type: ignore[assignment]
                     template_variant=qk_variant,
