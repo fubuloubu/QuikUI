@@ -3,16 +3,34 @@ from collections.abc import Container
 from enum import Enum
 from functools import cache
 from itertools import chain
-from typing import (Annotated, Any, Callable, ClassVar, Dict, Iterator, List,
-                    Literal, Self, Set)
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Iterator,
+    List,
+    Literal,
+    Self,
+    Set,
+)
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from jinja2 import Environment, PackageLoader, Template
 from jinja2 import TemplateNotFound as Jinja2TemplateNotFound
 from markupsafe import Markup
-from pydantic import (BaseModel, ConfigDict, Field, RootModel, ValidationError,
-                      field_validator, model_serializer, model_validator)
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    ValidationError,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 from pydantic.fields import FieldInfo
 
 from .exceptions import NoTemplateFound
