@@ -1,4 +1,7 @@
+import asyncio
 import random
+from collections.abc import AsyncIterator
+from datetime import datetime, timezone, tzinfo
 from enum import Enum
 
 import quikui as qk
@@ -86,7 +89,7 @@ def another_page():
 
 
 # NOTE: The components used do not have to be so fine-grained,
-class CustomComponent(qk.BaseComponent):
+class Component(qk.BaseComponent):
     """To make a renderable component, just subclass BaseComponent"""
 
     # NOTE: If you override `quikui_template_package_name` class variable with your own
@@ -94,7 +97,11 @@ class CustomComponent(qk.BaseComponent):
     #       with the name of this class and the `.html` extension, then it will "auto-render"
     quikui_template_package_name = "example"
 
-    # You can add whatever fields you'd like to your model
+
+class CustomComponent(Component):
+    # NOTE: It is recommended to create a base class that your other components inherit from
+
+    # You can add whatever fields you'd like to your models
     text: str = "Some random gibberish!"
 
 
@@ -168,3 +175,20 @@ def form_page():
 async def receive_form(form: CustomForm = Depends(CustomForm.as_form)):
     # NOTE: The `form_handler` dependency will handle parsing and unflattening native HTML Forms
     return [f"{field}: {value}" for field, value in form.model_dump().items()]
+
+
+class Notification(Component):
+    msg: str
+
+
+@app.get("/notifications")
+@qk.render_component(streaming=True)
+# NOTE: streaming responses don't have to be endless iterators
+async def notifications() -> "Notification":
+    yield Notification(msg="Wait 5 seconds for a notification")
+    await asyncio.sleep(5.0)
+    yield Notification(msg="Wait another 5 seconds for another")
+    await asyncio.sleep(5.0)
+    yield Notification(msg="No more notifications!")
+    await asyncio.sleep(50.0)
+    yield Notification(msg="Just kidding, htmx-sse auto-reconnects...")
