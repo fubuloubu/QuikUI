@@ -159,41 +159,6 @@ class BaseComponent(BaseModel):
     __quikui_component_name__: ClassVar[str | None] = None
     """To override the value of ``__quikui_component_name__`` when rendering the component."""
 
-    __quikui_css_classes__: CssClasses
-    """Add extra CSS classes to this component. Useful for integration with your design system."""
-
-    __quikui_extra_attributes__: Attributes
-    """Add extra attributes to this component. Exposed to template rendering."""
-
-    # NOTE: Needed to fetch extra kwargs to models (will be discarded in `__init__`)
-    __pydantic_extra__: dict[str, Any] = {}
-    model_config = ConfigDict(extra="allow")
-
-    @model_validator(mode="after")
-    def parse_css_and_attrs(self):
-        if hasattr(self, "__quikui_css_classes__") and hasattr(
-            self, "__quikui_extra_attributes__"
-        ):
-            return self
-
-        self.__quikui_css_classes__ = (
-            CssClasses(root=self.__pydantic_extra__.pop("css", set()))
-            if self.__pydantic_extra__
-            else CssClasses()
-        )
-
-        if self.__pydantic_extra__:
-            attrs = self.__pydantic_extra__.pop("attrs", dict())
-            attrs.update(self.__pydantic_extra__)
-            self.__quikui_extra_attributes__ = Attributes(root=attrs)
-
-        else:
-            self.__quikui_extra_attributes__ = Attributes()
-
-        self.__pydantic_extra__ = {}  # Remove extras
-
-        return self
-
     @classmethod
     @cache
     def quikui_environment(cls) -> Environment:
@@ -310,23 +275,39 @@ class BaseComponent(BaseModel):
         if not exclude:
             exclude = set()
 
+        # Get all fields from model_fields and model_computed_fields
+        model_field_names = set(
+            chain(self.model_fields, self.model_computed_fields, include)
+        )
+
+        # Also include any public attributes that exist but aren't in model_fields
+        # (e.g., SQLModel relationships like prosecutor, annotations)
+        for attr in dir(self):
+            if (
+                not attr.startswith("_")
+                and attr not in model_field_names
+                and attr not in exclude
+                and not callable(getattr(self, attr, None))
+                and hasattr(self, attr)
+            ):
+                # Skip class-level attributes and methods
+                try:
+                    val = getattr(self, attr)
+                    # Only include if it's an instance attribute, not a class var
+                    if not isinstance(
+                        getattr(type(self), attr, None),
+                        (type, classmethod, staticmethod),
+                    ):
+                        model_field_names.add(attr)
+                except (AttributeError, TypeError):
+                    pass
+
         model_dict = dict(
             # NOTE: Ensure properties are in original form, not serialized
             (f, getattr(self, f))
-            # NOTE: Ensure we get all public, computed, and any requested private fields...
-            for f in chain(self.model_fields, self.model_computed_fields, include)
-            #       ...but also allow skipping fields we don't need for template context.
-            if f not in exclude
+            for f in model_field_names
+            if f not in exclude and hasattr(self, f)
         )
-
-        # NOTE: Because SQLModel doesn't run validators on DB load
-        self.parse_css_and_attrs()
-
-        if attrs := self.__quikui_extra_attributes__:
-            model_dict["quikui_extra_attributes"] = attrs.model_dump()
-
-        if css := self.__quikui_css_classes__:
-            model_dict["quikui_css_classes"] = css.model_dump()
 
         model_dict["__quikui_component_name__"] = (
             self.__quikui_component_name__ or self.__class__.__name__
