@@ -316,10 +316,14 @@ class BaseComponent(BaseModel):
         # NOTE: Feed the rest of the kwargs to this function directly to the template rendering
         model_dict.update(kwargs)
 
-        return self.quikui_template(template_variant=template_variant).render(
-            **model_dict,
-            **(render_context or {}),
-        )
+        # Get global context from provider and merge it in
+        # Global context is added first so component data takes precedence
+        from .jinja import get_template_context
+
+        global_context = get_template_context()
+        context = {**global_context, **model_dict, **(render_context or {})}
+
+        return self.quikui_template(template_variant=template_variant).render(**context)
 
     def __html__(self) -> str:
         """
