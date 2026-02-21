@@ -1,6 +1,5 @@
 from enum import Enum
 from functools import cache
-from typing import ClassVar
 
 import pytest
 from fastapi import FastAPI, Form, status
