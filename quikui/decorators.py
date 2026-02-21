@@ -1,7 +1,6 @@
 import inspect
+from collections.abc import AsyncGenerator, Callable, Generator
 from functools import wraps
-from typing import Callable, Iterable
-from collections.abc import AsyncGenerator, Generator
 
 from fastapi import Response
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -11,10 +10,10 @@ from pydantic import BaseModel
 
 from .components import BaseComponent
 from .dependencies import QkVariant, RequestIfHtmlResponseNeeded
-from .exceptions import HtmlResponseOnly, ResponseNotRenderable
+from .exceptions import HtmlResponseOnlyError, ResponseNotRenderableError
+from .sse import EventStream
 from .types import FastApiDecorator, FastApiHandler, MaybeAsyncFunc, P, T
 from .utils import append_to_signature, execute_maybe_sync_func, get_response
-from .sse import EventStream
 
 
 def render_component(
@@ -54,10 +53,10 @@ def render_component(
             rendering a sequence result (e.g. `return wrapper(*result, **wrapper_kwargs)`).
 
     Raises:
-        :class:`~quikui.HtmlResponseOnly`:
+        :class:`~quikui.HtmlResponseOnlyError`:
             A 406 error if ``html_only`` is ``True`` and did not detect an HTML expected response.
 
-        :class:`~quikui.ResponseNotRenderable`: If the result of evaluating the handler function is
+        :class:`~quikui.ResponseNotRenderableError`: If the result of evaluating the handler function is
             not an instance of str, :class:`~quikui.BaseComponent`, or
             a sequence of :class:`~quikui.BaseComponent`s, and no ``template`` is provided.
 
@@ -106,7 +105,7 @@ def render_component(
             **kwargs: P.kwargs,
         ) -> T | Response:
             if html_only and __html_request is None:
-                raise HtmlResponseOnly()
+                raise HtmlResponseOnlyError()
 
             # NOTE: Short-circut to return response directly if user returns one
             if isinstance(
@@ -122,9 +121,7 @@ def render_component(
                     return result
 
                 elif isinstance(result, AsyncGenerator):
-                    model_iter = (
-                        item.model_dump_json() + "\n" async for item in result
-                    )
+                    model_iter = (item.model_dump_json() + "\n" async for item in result)
 
                 elif isinstance(result, Generator):
                     model_iter = (item.model_dump_json() + "\n" for item in result)
@@ -142,13 +139,9 @@ def render_component(
             request = __html_request
 
             # Render model as HTML using Template
-            if (response_template := get_template()) and isinstance(
-                result, (BaseModel, dict)
-            ):
+            if (response_template := get_template()) and isinstance(result, (BaseModel, dict)):
                 result = response_template.render(
-                    **(
-                        result.model_dump() if isinstance(result, BaseModel) else result
-                    ),
+                    **(result.model_dump() if isinstance(result, BaseModel) else result),
                     request=request,
                     url_for=request.url_for,
                 )
@@ -187,9 +180,7 @@ def render_component(
                             if isinstance(r, str)
                             else r.model_dump_html(
                                 template_variant=qk_variant,
-                                render_context=dict(
-                                    request=request, url_for=request.url_for
-                                ),
+                                render_context={"request": request, "url_for": request.url_for},
                             )
                         )
                         for r in result
@@ -202,9 +193,7 @@ def render_component(
                     model_iter = (
                         item.model_dump_html(
                             template_variant=qk_variant,
-                            render_context=dict(
-                                request=request, url_for=request.url_for
-                            ),
+                            render_context={"request": request, "url_for": request.url_for},
                         )
                         async for item in result
                     )
@@ -213,9 +202,7 @@ def render_component(
                     model_iter = (
                         item.model_dump_html(
                             template_variant=qk_variant,
-                            render_context=dict(
-                                request=request, url_for=request.url_for
-                            ),
+                            render_context={"request": request, "url_for": request.url_for},
                         )
                         for item in result
                     )
@@ -235,13 +222,13 @@ def render_component(
                 if result is None:
                     return HTMLResponse("")
                 # NOTE: Should not happen if library is used properly
-                raise ResponseNotRenderable(result)
+                raise ResponseNotRenderableError(result)
 
             # We have a model to render to HTML (or converted to one above)
             if isinstance(result, BaseComponent):
                 result = result.model_dump_html(
                     template_variant=qk_variant,
-                    render_context=dict(request=request, url_for=request.url_for),
+                    render_context={"request": request, "url_for": request.url_for},
                 )
 
             # else: `result` is assumed to be HTML str now (NOTE: could be unsafe)

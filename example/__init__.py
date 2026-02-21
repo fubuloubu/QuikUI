@@ -13,15 +13,16 @@ Note: This example uses in-memory storage for simplicity. In production,
 you would use SQLModel or another ORM for database persistence.
 """
 
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from enum import Enum
-from typing import AsyncIterator
 
-import quikui as qk
 from fastapi import FastAPI, Form, HTTPException, status
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import Field
+
+import quikui as qk
 
 app = FastAPI(title="QuikUI Example")
 

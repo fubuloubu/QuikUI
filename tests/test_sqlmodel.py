@@ -1,7 +1,7 @@
 import pytest
-from sqlmodel import SQLModel, Field, Relationship, create_engine, Session
+from jinja2 import DictLoader, Environment
 from sqlalchemy.pool import StaticPool
-from jinja2 import Environment, DictLoader
+from sqlmodel import Field, Relationship, Session, SQLModel, create_engine
 
 import quikui as qk
 

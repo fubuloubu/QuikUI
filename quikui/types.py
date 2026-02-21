@@ -1,14 +1,12 @@
-from collections.abc import AsyncGenerator, Callable
-from typing import Any, Coroutine
-from typing import ParamSpec, TypeVar
+from collections.abc import AsyncGenerator, Callable, Coroutine
+from typing import Any, ParamSpec, TypeVar
 
 from fastapi import Response
 
 P = ParamSpec("P")
 T = TypeVar("T")
 MaybeAsyncFunc = (
-    Callable[P, T]
-    | Callable[P, Coroutine[Any, Any, T] | Callable[P, AsyncGenerator[T]]]
+    Callable[P, T] | Callable[P, Coroutine[Any, Any, T] | Callable[P, AsyncGenerator[T]]]
 )
 
 # FastAPI-specific

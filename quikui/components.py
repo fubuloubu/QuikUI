@@ -10,7 +10,7 @@ from jinja2 import Environment, PackageLoader, Template
 from jinja2 import TemplateNotFound as Jinja2TemplateNotFound
 from pydantic import BaseModel
 
-from .exceptions import NoTemplateFound
+from .exceptions import NoTemplateFoundError
 
 
 def is_component(value: Any) -> bool:
@@ -113,7 +113,7 @@ class BaseComponent(BaseModel):
             :class:`~jinja2.Template`: The template to render this model with.
 
         Raises:
-            :class:`~quikui.NoTemplateFound`: If no template was found while recursing.
+            :class:`~quikui.NoTemplateFoundError`: If no template was found while recursing.
 
         ```{note}
         This method is not cached so updates to templates do not require reloading.
@@ -143,7 +143,7 @@ class BaseComponent(BaseModel):
                 template_class = template_class.__base__
 
         # NOTE: If we get to BaseComponent, there was some error in user's environment
-        raise NoTemplateFound(cls, template_variant)
+        raise NoTemplateFoundError(cls, template_variant)
 
     def model_dump_html(
         self,
@@ -213,11 +213,7 @@ class BaseComponent(BaseModel):
 
         # First, add attributes from instance __dict__ (skips class-level attributes)
         for attr in instance_dict:
-            if (
-                not attr.startswith("_")
-                and attr not in model_field_names
-                and attr not in exclude
-            ):
+            if not attr.startswith("_") and attr not in model_field_names and attr not in exclude:
                 val = instance_dict[attr]
                 if not callable(val):
                     model_field_names.add(attr)

@@ -1,6 +1,6 @@
 from typing import Annotated
-from fastapi import Request, Depends, Header
 
+from fastapi import Depends, Header, Request
 
 # HTMX Headers
 HxRequest = Annotated[bool, Header(include_in_schema=False)]
@@ -43,9 +43,7 @@ def request_if_html_response_needed(
         # Assume this is a browser-based SSE streaming call
         return request
 
-    elif accept is not None and (
-        accepted_types := list(t.strip() for t in accept.split(","))
-    ):
+    elif accept is not None and (accepted_types := [t.strip() for t in accept.split(",")]):
         if any(t.startswith("text/html") for t in accepted_types):
             return request  # We have determined this is expecting HTML back
 
@@ -53,6 +51,4 @@ def request_if_html_response_needed(
     return None
 
 
-RequestIfHtmlResponseNeeded = Annotated[
-    Request | None, Depends(request_if_html_response_needed)
-]
+RequestIfHtmlResponseNeeded = Annotated[Request | None, Depends(request_if_html_response_needed)]

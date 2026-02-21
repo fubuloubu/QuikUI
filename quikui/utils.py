@@ -69,4 +69,4 @@ def get_response(kwargs: Mapping[str, Any]) -> Response | None:
 
 
 def unflatten(form_data: FormData) -> dict:
-    return {key: value for key, value in form_data.items()}
+    return dict(form_data.items())

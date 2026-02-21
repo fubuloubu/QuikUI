@@ -1,11 +1,14 @@
+from collections.abc import Callable
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup
 
 if TYPE_CHECKING:
-    from jinja2 import Environment
     from collections.abc import Iterable
+
+    from jinja2 import Environment
+
     from .components import BaseComponent
 
 # Context variable to store the current template context provider
@@ -110,8 +113,7 @@ def render_component_variant(
 
     return Markup(
         "".join(
-            component.model_dump_html(template_variant=variant)
-            for component in component_or_list
+            component.model_dump_html(template_variant=variant) for component in component_or_list
         )
     )
 

@@ -1,8 +1,9 @@
-import pytest
 from enum import Enum
-from fastapi import FastAPI, status, Form
+
+import pytest
+from fastapi import FastAPI, Form, status
 from fastapi.testclient import TestClient
-from jinja2 import Environment, DictLoader
+from jinja2 import DictLoader, Environment
 
 import quikui as qk
 
@@ -95,9 +96,7 @@ def test_list_response_json(client):
 
 
 def test_post_html_mode(client):
-    response = client.post(
-        "/tasks", data={"title": "New Task"}, headers={"Accept": "text/html"}
-    )
+    response = client.post("/tasks", data={"title": "New Task"}, headers={"Accept": "text/html"})
     assert response.status_code == 200
     assert "New Task" in response.text
 
@@ -122,9 +121,7 @@ def test_delete_json_mode_returns_204(client):
 
 
 def test_variant_via_header(client):
-    response = client.get(
-        "/task/1", headers={"Accept": "text/html", "Qk-Variant": "table"}
-    )
+    response = client.get("/task/1", headers={"Accept": "text/html", "Qk-Variant": "table"})
     assert response.status_code == 200
     assert "<tr>" in response.text
     assert "<td>" in response.text

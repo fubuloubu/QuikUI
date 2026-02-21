@@ -1,5 +1,5 @@
 import pytest
-from jinja2 import Environment, DictLoader
+from jinja2 import DictLoader, Environment
 
 import quikui as qk
 
