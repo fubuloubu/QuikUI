@@ -164,3 +164,191 @@ def test_sqlmodel_computed_fields(session):
 
     html = profile.model_dump_html()
     assert "John Doe" in html
+
+
+def test_sqlmodel_detached_instance_error():
+    """Test that DetachedInstanceError provides helpful error message."""
+    from sqlalchemy.orm.exc import DetachedInstanceError
+
+    env = Environment(
+        loader=DictLoader(
+            {
+                "Company.html": "<div>{{ name }}</div>",
+                "Task.html": "<div>{{ title }} - {{ company.name }}</div>",
+            }
+        )
+    )
+    qk.register_filters(env)
+
+    class Company(qk.BaseComponent, SQLModel, table=True):
+        id: int | None = Field(default=None, primary_key=True)
+        name: str
+        tasks: list["Task"] = Relationship(back_populates="company")
+
+        @classmethod
+        @cache
+        def quikui_environment(cls) -> Environment:
+            return env
+
+    class Task(qk.BaseComponent, SQLModel, table=True):
+        id: int | None = Field(default=None, primary_key=True)
+        title: str
+        company_id: int | None = Field(default=None, foreign_key="company.id")
+        company: Company = Relationship(back_populates="tasks")
+
+        @classmethod
+        @cache
+        def quikui_environment(cls) -> Environment:
+            return env
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+
+    # Create data and get task_id
+    with Session(engine) as session:
+        company = Company(name="Bob")
+        task = Task(title="Build feature", company=company)
+        session.add_all([company, task])
+        session.commit()
+        task_id = task.id
+
+    # Query without eager loading and close session
+    with Session(engine) as session:
+        task = session.get(Task, task_id)
+        assert task is not None
+
+    # Now session is closed - should raise DetachedInstanceError with helpful message
+    with pytest.raises(DetachedInstanceError) as exc_info:
+        task.model_dump_html()
+
+    error_message = str(exc_info.value)
+    assert "QuikUI hint" in error_message
+    assert "relationship 'company'" in error_message
+    assert "selectinload" in error_message
+    assert "Task.company" in error_message
+
+
+def test_sqlmodel_eager_loaded_relationships():
+    """Test that eager-loaded relationships work even after session closes."""
+    from sqlalchemy.orm import selectinload
+    from sqlmodel import select
+
+    env = Environment(
+        loader=DictLoader(
+            {
+                "Author.html": "<div>{{ name }}</div>",
+                "Book.html": "<div>{{ title }} - {{ author.name }}</div>",
+            }
+        )
+    )
+    qk.register_filters(env)
+
+    class Author(qk.BaseComponent, SQLModel, table=True):
+        id: int | None = Field(default=None, primary_key=True)
+        name: str
+        books: list["Book"] = Relationship(back_populates="author")
+
+        @classmethod
+        @cache
+        def quikui_environment(cls) -> Environment:
+            return env
+
+    class Book(qk.BaseComponent, SQLModel, table=True):
+        id: int | None = Field(default=None, primary_key=True)
+        title: str
+        author_id: int | None = Field(default=None, foreign_key="author.id")
+        author: Author = Relationship(back_populates="books")
+
+        @classmethod
+        @cache
+        def quikui_environment(cls) -> Environment:
+            return env
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+
+    # Create data and get book_id
+    with Session(engine) as session:
+        author = Author(name="Alice")
+        book = Book(title="Important task", author=author)
+        session.add_all([author, book])
+        session.commit()
+        book_id = book.id
+
+    # Query WITH eager loading
+    with Session(engine) as session:
+        book = session.exec(
+            select(Book).where(Book.id == book_id).options(selectinload(Book.author))  # type: ignore[arg-type]
+        ).first()
+        assert book is not None
+        # Verify author is in __dict__ after eager loading
+        assert "author" in book.__dict__
+
+    # Session is closed, but should still work because relationship was eager-loaded
+    html = book.model_dump_html()
+    assert "Important task" in html
+    assert "Alice" in html
+
+
+def test_sqlmodel_relationship_in_instance_dict():
+    """Test that relationships already in instance.__dict__ are included."""
+    env = Environment(
+        loader=DictLoader(
+            {
+                "Customer.html": "<div>{{ name }}</div>",
+                "Order.html": "<div>{{ title }} - {{ customer.name }}</div>",
+            }
+        )
+    )
+    qk.register_filters(env)
+
+    class Customer(qk.BaseComponent, SQLModel, table=True):
+        id: int | None = Field(default=None, primary_key=True)
+        name: str
+        orders: list["Order"] = Relationship(back_populates="customer")
+
+        @classmethod
+        @cache
+        def quikui_environment(cls) -> Environment:
+            return env
+
+    class Order(qk.BaseComponent, SQLModel, table=True):
+        id: int | None = Field(default=None, primary_key=True)
+        title: str
+        customer_id: int | None = Field(default=None, foreign_key="customer.id")
+        customer: Customer = Relationship(back_populates="orders")
+
+        @classmethod
+        @cache
+        def quikui_environment(cls) -> Environment:
+            return env
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        customer = Customer(name="Charlie")
+        order = Order(title="Test order", customer=customer)
+        session.add_all([customer, order])
+        session.commit()
+        session.refresh(order)
+
+        # When we're still in session, relationship gets loaded into __dict__
+        _ = order.customer  # Access to trigger load
+        assert "customer" in order.__dict__
+
+        html = order.model_dump_html()
+        assert "Test order" in html
+        assert "Charlie" in html

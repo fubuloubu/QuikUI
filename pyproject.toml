@@ -33,11 +33,13 @@ lint = [
 ]
 test = [
   "pytest",
+  "pytest-asyncio",
   "sqlmodel",
 ]
 dev = [
   "IPython",
   "prek",
+  "pytest-cov",
   { include-group = "lint" },
   { include-group = "test" },
 ]
@@ -77,3 +79,6 @@ known-first-party = ["quikui"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
