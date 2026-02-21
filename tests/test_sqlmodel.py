@@ -1,3 +1,5 @@
+from functools import cache
+
 import pytest
 from jinja2 import DictLoader, Environment
 from sqlalchemy.pool import StaticPool
@@ -39,7 +41,8 @@ def test_sqlmodel_basic_fields(session, env):
         email: str
 
         @classmethod
-        def quikui_environment(cls):
+        @cache
+        def quikui_environment(cls) -> Environment:
             return env
 
     SQLModel.metadata.create_all(session.bind)
@@ -73,18 +76,20 @@ def test_sqlmodel_relationships(session):
         items: list["Item"] = Relationship(back_populates="owner")
 
         @classmethod
-        def quikui_environment(cls):
+        @cache
+        def quikui_environment(cls) -> Environment:
             return env
 
     class Item(qk.BaseComponent, SQLModel, table=True):
         id: int | None = Field(default=None, primary_key=True)
         title: str
-        owner_id: int = Field(foreign_key="owner.id")
+        owner_id: int | None = Field(default=None, foreign_key="owner.id")
 
         owner: Owner = Relationship(back_populates="items")
 
         @classmethod
-        def quikui_environment(cls):
+        @cache
+        def quikui_environment(cls) -> Environment:
             return env
 
     SQLModel.metadata.create_all(session.bind)
@@ -108,7 +113,8 @@ def test_sqlmodel_variant_rendering(session, env):
         username: str
 
         @classmethod
-        def quikui_environment(cls):
+        @cache
+        def quikui_environment(cls) -> Environment:
             return env
 
     SQLModel.metadata.create_all(session.bind)
@@ -145,7 +151,8 @@ def test_sqlmodel_computed_fields(session):
             return f"{self.first_name} {self.last_name}"
 
         @classmethod
-        def quikui_environment(cls):
+        @cache
+        def quikui_environment(cls) -> Environment:
             return env_local
 
     SQLModel.metadata.create_all(session.bind)

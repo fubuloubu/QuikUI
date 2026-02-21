@@ -100,11 +100,11 @@ def render_component(
         @wraps(func)
         async def wrapper_render_if_html_requested(
             *args: P.args,
-            __html_request: RequestIfHtmlResponseNeeded,
+            html_request: RequestIfHtmlResponseNeeded,
             qk_variant: QkVariant = None,
             **kwargs: P.kwargs,
         ) -> T | Response:
-            if html_only and __html_request is None:
+            if html_only and html_request is None:
                 raise HtmlResponseOnlyError()
 
             # NOTE: Short-circut to return response directly if user returns one
@@ -114,7 +114,7 @@ def render_component(
             ):
                 return result
 
-            elif __html_request is None:
+            elif html_request is None:
                 # NOTE: Fallback on FastAPI-native processing of models if not rendering HTML
 
                 if not streaming:
@@ -136,7 +136,7 @@ def render_component(
                 )
 
             # NOTE: Dependency resolves to a `Request` if we've made it this far
-            request = __html_request
+            request = html_request
 
             # Render model as HTML using Template
             if (response_template := get_template()) and isinstance(result, (BaseModel, dict)):
@@ -243,7 +243,7 @@ def render_component(
         return append_to_signature(
             wrapper_render_if_html_requested,
             inspect.Parameter(
-                "__html_request",
+                "html_request",
                 inspect.Parameter.KEYWORD_ONLY,
                 annotation=RequestIfHtmlResponseNeeded,
             ),

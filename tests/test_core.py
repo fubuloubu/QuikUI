@@ -1,4 +1,5 @@
 from enum import Enum
+from functools import cache
 
 import pytest
 from fastapi import FastAPI, Form, status
@@ -30,7 +31,8 @@ def app():
         status: Status = Status.ACTIVE
 
         @classmethod
-        def quikui_environment(cls):
+        @cache
+        def quikui_environment(cls) -> Environment:
             return env
 
     @app.get("/task/{task_id}")

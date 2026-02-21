@@ -17,7 +17,7 @@ _context_provider: ContextVar[Callable[[], dict[str, Any]] | None] = ContextVar(
 )
 
 
-def set_context_provider(provider: Callable[[], dict[str, Any]]):
+def set_context_provider(provider: Callable[[], dict[str, Any]] | None):
     """
     Set a function that provides global context for all component templates.
 
@@ -64,7 +64,7 @@ def set_context_provider(provider: Callable[[], dict[str, Any]]):
         {% endif %}
 
     Args:
-        provider: A callable that returns a dict of context variables
+        provider: A callable that returns a dict of context variables, or None to clear the provider
     """
     _context_provider.set(provider)
 

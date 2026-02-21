@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Iterator
+from typing import cast
 
 
 class EventStream(AsyncIterator[str]):
@@ -30,6 +31,8 @@ class EventStream(AsyncIterator[str]):
 
     async def __anext__(self) -> str:
         if isinstance(self.items, AsyncGenerator):
-            return self.format_item(await anext(self.items))
+            item = cast(str, await anext(self.items))
+            return self.format_item(item)
 
-        return self.format_item(next(self.items))
+        item = cast(str, next(self.items))
+        return self.format_item(item)

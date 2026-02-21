@@ -1,3 +1,5 @@
+from functools import cache
+
 import pytest
 from jinja2 import DictLoader, Environment
 
@@ -22,7 +24,8 @@ def widget_class(env):
         count: int
 
         @classmethod
-        def quikui_environment(cls):
+        @cache
+        def quikui_environment(cls) -> Environment:
             return env
 
     return Widget
