@@ -35,6 +35,7 @@ lint = [
 ]
 test = [
   "pytest",
+  "sqlmodel",
 ]
 release = [
   "setuptools_scm",
