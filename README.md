@@ -127,6 +127,30 @@ Use the `Qk-Variant` header to specify which template variant to render:
 
 The `|variant("table")` filter renders each task using `Task.table.html`.
 
+#### DELETE Requests with HTMX
+
+QuikUI automatically handles DELETE operations for both REST and HTMX clients:
+
+```python
+@app.delete("/api/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@qk.render_component()
+def delete_task(task_id: int):
+    del tasks_db[task_id]
+    # No return needed - None is implicit
+```
+
+**Behavior:**
+- **JSON clients**: `204 No Content` (standard REST)
+- **HTML/HTMX clients**: `200 OK` with empty string (enables element removal)
+
+```html
+<button hx-delete="/api/tasks/{{ id }}"
+        hx-target="#task-{{ id }}"
+        hx-swap="outerHTML">
+  Delete
+</button>
+```
+
 ### Template Context
 
 All model fields are automatically available in templates:

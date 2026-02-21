@@ -164,10 +164,11 @@ def update_task(
 
 
 @app.delete("/api/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@qk.render_component()
 def delete_task(task_id: int):
     """
     Delete a task.
-    - HTML mode: Element removed by HTMX (hx-swap="delete")
+    - HTML mode: Automatically converted to 200 OK with empty string for htmx compatibility
     - JSON mode: Returns 204 No Content
     """
     if task_id not in tasks_db:

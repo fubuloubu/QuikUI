@@ -230,6 +230,10 @@ def render_component(
 
             # Raise if we can't handle the rest of this
             elif not isinstance(result, (BaseComponent, str)):
+                # Special case: None result in HTML mode (e.g., DELETE endpoints)
+                # Return empty string for htmx compatibility
+                if result is None:
+                    return HTMLResponse("")
                 # NOTE: Should not happen if library is used properly
                 raise ResponseNotRenderable(result)
 
