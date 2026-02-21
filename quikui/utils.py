@@ -46,10 +46,10 @@ async def execute_maybe_sync_func(
         **kwargs: Keyword arguments to pass to the function.
     """
     if inspect.isasyncgenfunction(func):
-        return func(*args, **kwargs)
+        return func(*args, **kwargs)  # type: ignore[return-value]
 
     elif iscoroutinefunction(func):
-        return await func(*args, **kwargs)  # type: ignore[no-any-return]
+        return await func(*args, **kwargs)
 
     return await run_in_threadpool(cast(Callable[P, T], func), *args, **kwargs)
 
@@ -69,4 +69,4 @@ def get_response(kwargs: Mapping[str, Any]) -> Response | None:
 
 
 def unflatten(form_data: FormData) -> dict:
-    return {key: value for key, value in form_data.items()}
+    return dict(form_data.items())

@@ -1,0 +1,45 @@
+# prek configuration for pre-commit hooks
+# https://github.com/anthonywritescode/prek
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+[[repos.hooks]]
+id = "end-of-file-fixer"
+[[repos.hooks]]
+id = "check-toml"
+[[repos.hooks]]
+id = "check-yaml"
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "ruff-check"
+name = "ruff check"
+entry = "uv run --group lint ruff check --fix"
+language = "system"
+types = ["python"]
+pass_filenames = false
+
+[[repos.hooks]]
+id = "ruff-format"
+name = "ruff format"
+entry = "uv run --group lint ruff format"
+language = "system"
+types = ["python"]
+pass_filenames = false
+
+[[repos.hooks]]
+id = "ty-check"
+name = "ty type check"
+entry = "uv run --group lint ty check"
+language = "system"
+types = ["python"]
+pass_filenames = false
+# Allow failures for now due to test file type issues
+# Remove this line once type issues are resolved
+always_run = false

@@ -1,13 +1,16 @@
+from typing import Any
+
 from fastapi import HTTPException, status
-from typing import Any, Type
 
 
-class BaseException(Exception):
+class QuikUIError(Exception):
+    """Base exception for all QuikUI errors."""
+
     pass
 
 
-class NoTemplateFound(BaseException, RuntimeError):
-    def __init__(self, cls: Type, template_variant: str | None):
+class NoTemplateFoundError(QuikUIError, RuntimeError):
+    def __init__(self, cls: type, template_variant: str | None):
         if template_variant:
             template_name = f"{cls.__name__}.{template_variant}.html"
         else:
@@ -19,7 +22,7 @@ class NoTemplateFound(BaseException, RuntimeError):
         )
 
 
-class HtmlResponseOnly(BaseException, HTTPException):
+class HtmlResponseOnlyError(QuikUIError, HTTPException):
     def __init__(self):
         super().__init__(
             status_code=status.HTTP_406_NOT_ACCEPTABLE,
@@ -27,7 +30,7 @@ class HtmlResponseOnly(BaseException, HTTPException):
         )
 
 
-class ResponseNotRenderable(BaseException, ValueError):
+class ResponseNotRenderableError(QuikUIError, ValueError):
     def __init__(self, result: Any):
         super().__init__(
             "Result type must either be an HTML-safe string, an instance of a BaseComponent "
@@ -36,7 +39,8 @@ class ResponseNotRenderable(BaseException, ValueError):
 
 
 __all__ = [
-    HtmlResponseOnly.__name__,
-    NoTemplateFound.__name__,
-    ResponseNotRenderable.__name__,
+    "QuikUIError",
+    "HtmlResponseOnlyError",
+    "NoTemplateFoundError",
+    "ResponseNotRenderableError",
 ]

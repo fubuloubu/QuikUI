@@ -1,7 +1,6 @@
 import inspect
+from collections.abc import AsyncGenerator, Callable, Generator
 from functools import wraps
-from typing import Callable, Iterable
-from collections.abc import AsyncGenerator, Generator
 
 from fastapi import Response
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -9,19 +8,19 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, Template
 from pydantic import BaseModel
 
-from .components import BaseComponent, Div
+from .components import BaseComponent
 from .dependencies import QkVariant, RequestIfHtmlResponseNeeded
-from .exceptions import HtmlResponseOnly, ResponseNotRenderable
+from .exceptions import HtmlResponseOnlyError, ResponseNotRenderableError
+from .sse import EventStream
 from .types import FastApiDecorator, FastApiHandler, MaybeAsyncFunc, P, T
 from .utils import append_to_signature, execute_maybe_sync_func, get_response
-from .sse import EventStream
 
 
 def render_component(
     html_only: bool = False,
     template: Template | str | None = None,
     env: Environment | Jinja2Templates | None = None,
-    wrapper: Callable[[Iterable[BaseComponent]], BaseComponent] | None = None,
+    wrapper: Callable[..., BaseComponent] | None = None,
     wrapper_kwargs: dict | None = None,
     streaming: bool = False,
 ) -> FastApiDecorator:
@@ -47,17 +46,17 @@ def render_component(
         wrapper:
             Function to use to wrap a sequence (e.g. ``list``) returned from a handler to
             transform it into an instance of :class:`~quikui.BaseComponent` for rendering.
-            Defaults to :class:`~quikui.Div` for rendering a sequence result.
+            If not provided, sequence items are concatenated as HTML strings.
 
         **wrapper_kwargs:
             Keyword arguments to forward to constructing the model given in ``wrapper`` when
             rendering a sequence result (e.g. `return wrapper(*result, **wrapper_kwargs)`).
 
     Raises:
-        :class:`~quikui.HtmlResponseOnly`:
+        :class:`~quikui.HtmlResponseOnlyError`:
             A 406 error if ``html_only`` is ``True`` and did not detect an HTML expected response.
 
-        :class:`~quikui.ResponseNotRenderable`: If the result of evaluating the handler function is
+        :class:`~quikui.ResponseNotRenderableError`: If the result of evaluating the handler function is
             not an instance of str, :class:`~quikui.BaseComponent`, or
             a sequence of :class:`~quikui.BaseComponent`s, and no ``template`` is provided.
 
@@ -89,24 +88,24 @@ def render_component(
         if env is None:
             raise AssertionError("`env=` must be set if `template=` is a str.")
 
-        def get_template():
+        def get_template() -> Template | None:
             return env.get_template(template)
 
     else:
 
-        def get_template():
+        def get_template() -> Template | None:
             return template  # type is `Template | None`
 
     def decorator(func: MaybeAsyncFunc[P, T]) -> FastApiHandler:
         @wraps(func)
         async def wrapper_render_if_html_requested(
             *args: P.args,
-            __html_request: RequestIfHtmlResponseNeeded,
+            html_request: RequestIfHtmlResponseNeeded,
             qk_variant: QkVariant = None,
             **kwargs: P.kwargs,
         ) -> T | Response:
-            if html_only and __html_request is None:
-                raise HtmlResponseOnly()
+            if html_only and html_request is None:
+                raise HtmlResponseOnlyError()
 
             # NOTE: Short-circut to return response directly if user returns one
             if isinstance(
@@ -115,16 +114,14 @@ def render_component(
             ):
                 return result
 
-            elif __html_request is None:
+            elif html_request is None:
                 # NOTE: Fallback on FastAPI-native processing of models if not rendering HTML
 
                 if not streaming:
                     return result
 
                 elif isinstance(result, AsyncGenerator):
-                    model_iter = (
-                        item.model_dump_json() + "\n" async for item in result
-                    )
+                    model_iter = (item.model_dump_json() + "\n" async for item in result)
 
                 elif isinstance(result, Generator):
                     model_iter = (item.model_dump_json() + "\n" for item in result)
@@ -139,16 +136,12 @@ def render_component(
                 )
 
             # NOTE: Dependency resolves to a `Request` if we've made it this far
-            request = __html_request
+            request = html_request
 
             # Render model as HTML using Template
-            if (response_template := get_template()) and isinstance(
-                result, (BaseModel, dict)
-            ):
+            if (response_template := get_template()) and isinstance(result, (BaseModel, dict)):
                 result = response_template.render(
-                    **(
-                        result.model_dump() if isinstance(result, BaseModel) else result
-                    ),
+                    **(result.model_dump() if isinstance(result, BaseModel) else result),
                     request=request,
                     url_for=request.url_for,
                 )
@@ -159,48 +152,57 @@ def render_component(
                 and isinstance(result, (tuple, list))
                 and all(isinstance(r, (BaseModel, dict)) for r in result)
             ):
-                result = (wrapper if wrapper else Div)(  # type: ignore[operator]
-                    *(
-                        response_template.render(
-                            **(r.model_dump() if isinstance(r, BaseModel) else r),
-                            request=request,
-                            url_for=request.url_for,
-                        )
-                        for r in result
-                    ),
-                    **(wrapper_kwargs or {}),
-                )
+                rendered_items = [
+                    response_template.render(
+                        **(r.model_dump() if isinstance(r, BaseModel) else r),
+                        request=request,
+                        url_for=request.url_for,
+                    )
+                    for r in result
+                ]
+                # Rendered items are HTML strings - wrap or concatenate
+                if wrapper:
+                    result = wrapper(*rendered_items, **(wrapper_kwargs or {}))
+                else:
+                    result = "".join(rendered_items)
 
             # Wrap sequence of models into another element to process further
             elif isinstance(result, (tuple, list)) and all(
                 isinstance(r, (BaseComponent, str)) for r in result
             ):
-                result = (wrapper if wrapper else Div)(  # type: ignore[operator]
-                    *result,
-                    **(wrapper_kwargs or {}),
-                )
+                if wrapper:
+                    result = wrapper(*result, **(wrapper_kwargs or {}))
+                else:
+                    # Concatenate HTML strings from components
+                    result = "".join(
+                        (
+                            r
+                            if isinstance(r, str)
+                            else r.model_dump_html(
+                                template_variant=qk_variant,
+                                render_context={"request": request, "url_for": request.url_for},
+                            )
+                        )
+                        for r in result
+                    )
 
             # Assume sequence of models is a generator,
             # and stream response (rendering each model as HTML)
             elif streaming:
                 if isinstance(result, AsyncGenerator):
                     model_iter = (
-                        item.model_dump_html(  # type: ignore[assignment]
+                        item.model_dump_html(
                             template_variant=qk_variant,
-                            render_context=dict(
-                                request=request, url_for=request.url_for
-                            ),
+                            render_context={"request": request, "url_for": request.url_for},
                         )
                         async for item in result
                     )
 
                 elif isinstance(result, Generator):
                     model_iter = (
-                        item.model_dump_html(  # type: ignore[assignment]
+                        item.model_dump_html(
                             template_variant=qk_variant,
-                            render_context=dict(
-                                request=request, url_for=request.url_for
-                            ),
+                            render_context={"request": request, "url_for": request.url_for},
                         )
                         for item in result
                     )
@@ -215,14 +217,18 @@ def render_component(
 
             # Raise if we can't handle the rest of this
             elif not isinstance(result, (BaseComponent, str)):
+                # Special case: None result in HTML mode (e.g., DELETE endpoints)
+                # Return empty string for htmx compatibility
+                if result is None:
+                    return HTMLResponse("")
                 # NOTE: Should not happen if library is used properly
-                raise ResponseNotRenderable(result)
+                raise ResponseNotRenderableError(result)
 
             # We have a model to render to HTML (or converted to one above)
             if isinstance(result, BaseComponent):
-                result = result.model_dump_html(  # type: ignore[assignment]
+                result = result.model_dump_html(
                     template_variant=qk_variant,
-                    render_context=dict(request=request, url_for=request.url_for),
+                    render_context={"request": request, "url_for": request.url_for},
                 )
 
             # else: `result` is assumed to be HTML str now (NOTE: could be unsafe)
@@ -237,7 +243,7 @@ def render_component(
         return append_to_signature(
             wrapper_render_if_html_requested,
             inspect.Parameter(
-                "__html_request",
+                "html_request",
                 inspect.Parameter.KEYWORD_ONLY,
                 annotation=RequestIfHtmlResponseNeeded,
             ),
