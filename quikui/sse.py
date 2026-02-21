@@ -36,6 +36,6 @@ class EventStream(AsyncIterator[str]):
 
         try:
             item = cast(str, next(self.items))
-        except StopIteration:
-            raise StopAsyncIteration
+        except StopIteration as err:
+            raise StopAsyncIteration from err
         return self.format_item(item)
