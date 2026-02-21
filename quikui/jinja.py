@@ -110,7 +110,8 @@ def render_component_variant(
 
     return Markup(
         "".join(
-            component.model_dump_html(template_variant=variant) for component in component_or_list
+            component.model_dump_html(template_variant=variant)
+            for component in component_or_list
         )
     )
 

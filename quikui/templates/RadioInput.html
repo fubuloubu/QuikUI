@@ -1,5 +1,0 @@
-{% if label -%}{{ label }}{%- endif %}
-{% for option in options -%}
-  <input id="{{ option.id }}" name="{{ name }}" type="{{ type }}" value="{{ option.value }}">
-  {% if option.label -%}{{ option.label }}{%- endif %}
-{%- endfor %}

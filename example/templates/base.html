@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}QuikUI Example{% endblock %}</title>
+    
+    {# TailwindCSS for styling #}
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    {# HTMX for interactivity #}
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+    
+    {# Alpine.js for client-side state #}
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen">
+    {# Navigation #}
+    <nav class="bg-white shadow-sm mb-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold text-gray-900">QuikUI Task Manager</h1>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    {# Main content #}
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    {# Toast notification container (SSE disabled by default - uncomment to enable) #}
+    <div id="toast-container" 
+         class="fixed top-4 right-4 space-y-2 z-50">
+         {# Uncomment to enable live notifications via SSE:
+         hx-ext="sse"
+         sse-connect="/notifications"
+         sse-swap="message"
+         hx-swap="beforeend"
+         #}
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

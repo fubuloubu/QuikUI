@@ -1,0 +1,23 @@
+{# Default detail view for a Task #}
+<div class="bg-white rounded-lg shadow p-6">
+    <div class="flex justify-between items-start mb-4">
+        <h3 class="text-xl font-semibold">{{ title }}</h3>
+        <span class="px-2 py-1 text-xs font-semibold rounded-full
+            {% if status.value == 'done' %}
+                bg-green-100 text-green-800
+            {% elif status.value == 'in_progress' %}
+                bg-yellow-100 text-yellow-800
+            {% else %}
+                bg-gray-100 text-gray-800
+            {% endif %}">
+            {{ status.value.replace('_', ' ').title() }}
+        </span>
+    </div>
+    
+    <p class="text-gray-700 mb-4">{{ description or 'No description provided.' }}</p>
+    
+    <div class="text-sm text-gray-500 space-y-1">
+        <p>Created: {{ created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+        <p>Updated: {{ updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
+    </div>
+</div>

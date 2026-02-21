@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, Template
 from pydantic import BaseModel
 
-from .components import BaseComponent, Div
+from .components import BaseComponent
 from .dependencies import QkVariant, RequestIfHtmlResponseNeeded
 from .exceptions import HtmlResponseOnly, ResponseNotRenderable
 from .types import FastApiDecorator, FastApiHandler, MaybeAsyncFunc, P, T
@@ -21,7 +21,7 @@ def render_component(
     html_only: bool = False,
     template: Template | str | None = None,
     env: Environment | Jinja2Templates | None = None,
-    wrapper: Callable[[Iterable[BaseComponent]], BaseComponent] | None = None,
+    wrapper: Callable[..., BaseComponent] | None = None,
     wrapper_kwargs: dict | None = None,
     streaming: bool = False,
 ) -> FastApiDecorator:
@@ -47,7 +47,7 @@ def render_component(
         wrapper:
             Function to use to wrap a sequence (e.g. ``list``) returned from a handler to
             transform it into an instance of :class:`~quikui.BaseComponent` for rendering.
-            Defaults to :class:`~quikui.Div` for rendering a sequence result.
+            If not provided, sequence items are concatenated as HTML strings.
 
         **wrapper_kwargs:
             Keyword arguments to forward to constructing the model given in ``wrapper`` when
@@ -89,12 +89,12 @@ def render_component(
         if env is None:
             raise AssertionError("`env=` must be set if `template=` is a str.")
 
-        def get_template():
+        def get_template() -> Template | None:
             return env.get_template(template)
 
     else:
 
-        def get_template():
+        def get_template() -> Template | None:
             return template  # type is `Template | None`
 
     def decorator(func: MaybeAsyncFunc[P, T]) -> FastApiHandler:
@@ -159,33 +159,48 @@ def render_component(
                 and isinstance(result, (tuple, list))
                 and all(isinstance(r, (BaseModel, dict)) for r in result)
             ):
-                result = (wrapper if wrapper else Div)(  # type: ignore[operator]
-                    *(
-                        response_template.render(
-                            **(r.model_dump() if isinstance(r, BaseModel) else r),
-                            request=request,
-                            url_for=request.url_for,
-                        )
-                        for r in result
-                    ),
-                    **(wrapper_kwargs or {}),
-                )
+                rendered_items = [
+                    response_template.render(
+                        **(r.model_dump() if isinstance(r, BaseModel) else r),
+                        request=request,
+                        url_for=request.url_for,
+                    )
+                    for r in result
+                ]
+                # Rendered items are HTML strings - wrap or concatenate
+                if wrapper:
+                    result = wrapper(*rendered_items, **(wrapper_kwargs or {}))
+                else:
+                    result = "".join(rendered_items)
 
             # Wrap sequence of models into another element to process further
             elif isinstance(result, (tuple, list)) and all(
                 isinstance(r, (BaseComponent, str)) for r in result
             ):
-                result = (wrapper if wrapper else Div)(  # type: ignore[operator]
-                    *result,
-                    **(wrapper_kwargs or {}),
-                )
+                if wrapper:
+                    result = wrapper(*result, **(wrapper_kwargs or {}))
+                else:
+                    # Concatenate HTML strings from components
+                    result = "".join(
+                        (
+                            r
+                            if isinstance(r, str)
+                            else r.model_dump_html(
+                                template_variant=qk_variant,
+                                render_context=dict(
+                                    request=request, url_for=request.url_for
+                                ),
+                            )
+                        )
+                        for r in result
+                    )
 
             # Assume sequence of models is a generator,
             # and stream response (rendering each model as HTML)
             elif streaming:
                 if isinstance(result, AsyncGenerator):
                     model_iter = (
-                        item.model_dump_html(  # type: ignore[assignment]
+                        item.model_dump_html(
                             template_variant=qk_variant,
                             render_context=dict(
                                 request=request, url_for=request.url_for
@@ -196,7 +211,7 @@ def render_component(
 
                 elif isinstance(result, Generator):
                     model_iter = (
-                        item.model_dump_html(  # type: ignore[assignment]
+                        item.model_dump_html(
                             template_variant=qk_variant,
                             render_context=dict(
                                 request=request, url_for=request.url_for
@@ -220,7 +235,7 @@ def render_component(
 
             # We have a model to render to HTML (or converted to one above)
             if isinstance(result, BaseComponent):
-                result = result.model_dump_html(  # type: ignore[assignment]
+                result = result.model_dump_html(
                     template_variant=qk_variant,
                     render_context=dict(request=request, url_for=request.url_for),
                 )

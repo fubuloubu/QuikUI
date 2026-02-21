@@ -19,18 +19,14 @@ class EventStream(AsyncIterator[str]):
         return self
 
     def format_item(self, item: str) -> str:
-        match self.event, self.retry:
-            case None, None:
-                return f"data: {item}\n\n"
-
-            case str(event), None:
-                return f"event: {event}\ndata: {item}\n\n"
-
-            case None, int(retry):
-                return f"data: {item}\nretry: {retry}\n\n"
-
-            case str(event), int(retry):
-                return f"event: {event}\ndata: {item}\nretry: {retry}\n\n"
+        if self.event and self.retry:
+            return f"event: {self.event}\ndata: {item}\nretry: {self.retry}\n\n"
+        elif self.event:
+            return f"event: {self.event}\ndata: {item}\n\n"
+        elif self.retry:
+            return f"data: {item}\nretry: {self.retry}\n\n"
+        else:
+            return f"data: {item}\n\n"
 
     async def __anext__(self) -> str:
         if isinstance(self.items, AsyncGenerator):

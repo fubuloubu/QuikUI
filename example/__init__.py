@@ -1,220 +1,237 @@
-import asyncio
-import random
-from collections.abc import AsyncIterator
-from datetime import datetime, timezone, tzinfo
+"""
+QuikUI Example Application
+
+This example demonstrates how to use QuikUI in a production-like scenario,
+showing HTMX fragment rendering with template variants.
+The example shows:
+- HTMX fragment rendering with template variants
+- Create, read, update, and delete operations
+- Streaming Server-Sent Events (SSE)
+- Form handling with validation
+
+Note: This example uses in-memory storage for simplicity. In production,
+you would use SQLModel or another ORM for database persistence.
+"""
+
+from datetime import datetime, timezone
 from enum import Enum
+from typing import AsyncIterator
 
 import quikui as qk
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import FastAPI, Form, HTTPException, status
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-app = FastAPI()
+app = FastAPI(title="QuikUI Example")
 
-# You can use your existing the templates the same
+# Setup templates
 templates = Jinja2Templates(directory="example/templates")
+qk.register_filters(templates.env)
 
 
-# NOTE: It is recommended to exclude `html_only=True` routes from the schema
-@app.get("/", include_in_schema=False)
-@app.get("/index.html", include_in_schema=False)
-# In fact, `template=` is a nice way to render pages directly without needing a custom Component
-@qk.render_component(html_only=True, template="CustomPage.html", env=templates)
-async def index():
-    # NOTE: When using `template=`, you can just directly return a dict or BaseModel
-    return dict(
-        title="Basic Demo App",
-        content=[
-            qk.Div(
-                qk.Heading("Basic Component Demo"),
-                qk.Paragraph("This is a paragraph element."),
-                qk.Div(
-                    qk.Paragraph("This is a paragraph inside a div."),
-                    qk.Paragraph("This is another paragraph inside a div."),
-                    qk.Paragraph(
-                        content=qk.Span(
-                            "This is a span ",
-                            qk.Anchor(
-                                "with a link",
-                                route="https://google.com",
-                                # You can add extra html attributes via kwargs
-                                target="_blank",  # NOTE: Open link in a new tab
-                            ),
-                            " to something inside that same div.",
-                        )
-                    ),
-                    # Can add custom CSS classes to any component via `css=...`
-                    css="my-3",
-                ),
-                qk.Paragraph(
-                    qk.Span(
-                        "This is another span with a link",
-                        qk.Anchor(
-                            " to another page",
-                            route="/another-page",
-                        ),
-                        ", outside the div.",
-                    ),
-                ),
-            )
-        ],
-    )
-
-
-@app.get("/another-page")
-# NOTE: You can supply a template directly, but be aware it will not automatically update
-#       (Try modifying `CustomPage.html` and refreshing both this page and the previous)
-@qk.render_component(html_only=True, template=templates.get_template("CustomPage.html"))
-def another_page():
-    return dict(
-        title="A page with dynamic content",
-        content=[
-            qk.Heading("Using HTMX"),
-            qk.Paragraph(
-                "This button uses HTMX to dynamically fetch content"
-                " from the server using a GET request."
-            ),
-            qk.Button(
-                "Get Dynamic Content",
-                # can also add extra attributes via `attrs=dict(...)` kwarg
-                # NOTE: This is useful for when attrs have `-` in them, or are protected keywords
-                attrs={"hx-get": "/dynamic", "type": "button", "hx-swap": "outerHTML"},
-            ),
-            qk.Button(
-                "Get Form",
-                attrs={"hx-get": "/form", "type": "button", "hx-swap": "outerHTML"},
-            ),
-        ],
-    )
-
-
-# NOTE: The components used do not have to be so fine-grained,
+# Base Component
 class Component(qk.BaseComponent):
-    """To make a renderable component, just subclass BaseComponent"""
+    """
+    Base class for all models in this application.
+    Provides QuikUI's rendering capabilities.
+    """
 
-    # NOTE: If you override `quikui_template_package_name` class variable with your own
-    #       package or app, and that contains a `/templates` folder that has a template
-    #       with the name of this class and the `.html` extension, then it will "auto-render"
     quikui_template_package_name = "example"
 
 
-class CustomComponent(Component):
-    # NOTE: It is recommended to create a base class that your other components inherit from
-
-    # You can add whatever fields you'd like to your models
-    text: str = "Some random gibberish!"
+# Domain Models
 
 
-@app.get("/dynamic")
-@qk.render_component()  # NOTE: Allows both w/ html and json response modes when `html_only=False`
-def dynamic_content():
-    return [
-        CustomComponent(text=random.choice(["Select", "Dynamic", "Content"]))
-        for _ in range(random.randint(1, 10))
-    ]
+class TaskStatus(str, Enum):
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
 
 
-class CarTypes(Enum):
-    NONE_SELECTED = "Select a Car"
-    FIAT = "Fiat"
-    DODGE = "Dodge"
+class Task(Component):
+    """
+    A task in our todo list application.
+
+    Templates:
+    - Task.html: Default detail view
+    - Task.table.html: Table row for task list
+    """
+
+    id: int
+    title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    status: TaskStatus = TaskStatus.TODO
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-# NOTE: This is not a component!
-class CustomForm(qk.FormModel):
-    username: str = Field(
-        form_type=qk.TextInput,
-        form_attributes=dict(label="Username:", add_break=True),
+# In-memory storage (use SQLModel in production)
+tasks_db: dict[int, Task] = {}
+next_id = 1
+
+
+# Routes
+
+
+@app.get("/", include_in_schema=False)
+async def redirect_to_home():
+    return RedirectResponse("/tasks")
+
+
+@app.get("/tasks", include_in_schema=False)
+@qk.render_component(html_only=True, template="tasks.html", env=templates)
+def tasks_page():
+    """Main page showing all tasks."""
+    return {"tasks": list(tasks_db.values()), "statuses": TaskStatus}
+
+
+@app.get("/api/tasks")
+@qk.render_component()
+def get_tasks() -> list[Task]:
+    """
+    Get all tasks.
+    - HTML mode: Returns table rows (using Task.table.html variant)
+    - JSON mode: Returns list of task objects
+    """
+    return sorted(tasks_db.values(), key=lambda t: t.created_at, reverse=True)
+
+
+@app.get("/api/tasks/{task_id}")
+@qk.render_component()
+def get_task(task_id: int) -> Task:
+    """
+    Get a single task.
+    - HTML mode: Returns task detail view (using Task.html)
+    - JSON mode: Returns task object
+    """
+    task = tasks_db.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+@app.post("/api/tasks", status_code=status.HTTP_201_CREATED)
+@qk.render_component()
+def create_task(
+    title: str = Form(...),
+    description: str = Form(""),
+    status_value: str = Form(TaskStatus.TODO.value),
+) -> Task:
+    """
+    Create a new task.
+    - HTML mode: Returns table row to prepend to list (using Task.table.html via header)
+    - JSON mode: Returns created task object
+    """
+    global next_id
+    task = Task(
+        id=next_id,
+        title=title,
+        description=description,
+        status=TaskStatus(status_value),
     )
-    email: str = Field(
-        form_type=qk.EmailInput,
-        form_attributes=dict(label="Email:", add_break=True),
-    )
-    password: str = Field(
-        form_type=qk.PasswordInput,
-        form_attributes=dict(label="Password:", add_break=True),
-    )
-    save_password: bool = Field(
-        form_type=qk.CheckboxInput,
-        form_attributes=dict(label="Save Password?"),
-    )
-    car_choice: CarTypes = Field(
-        form_type=qk.RadioInput,
-        form_attributes=dict(label="First Choice:"),
-    )
-    backup_choice: CarTypes = Field(
-        form_type=qk.SelectionInput,
-        form_attributes=dict(
-            label="Second Choice:",
-            selected=CarTypes.NONE_SELECTED,
-            disabled={CarTypes.NONE_SELECTED},
-        ),
-    )
-
-    # NOTE: Override `.create_form_items()` with custom form item generator if desired
+    tasks_db[next_id] = task
+    next_id += 1
+    return task
 
 
-@app.get("/form")
-@qk.render_component(html_only=True)  # NOTE: Only need this page to fetch the form
-def form_page():
-    return CustomForm.create_form(
-        id="a-form", form_attrs={"hx-post": "/completed-form"}
-    )
+@app.patch("/api/tasks/{task_id}")
+@qk.render_component()
+def update_task(
+    task_id: int,
+    title: str = Form(None),
+    description: str = Form(None),
+    status_value: str = Form(None),
+) -> Task:
+    """
+    Update a task.
+    - HTML mode: Returns updated table row (using Task.table.html via header)
+    - JSON mode: Returns updated task object
+    """
+    task = tasks_db.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if title is not None:
+        task.title = title
+    if description is not None:
+        task.description = description
+    if status_value is not None:
+        task.status = TaskStatus(status_value)
+
+    task.updated_at = datetime.now(timezone.utc)
+    return task
 
 
-@app.post("/completed-form")
-@qk.render_component(
-    # You can give a "wrapper" component to use for wrapping an iterable result in html render mode
-    wrapper=qk.UnorderedList,  # NOTE: By default uses `qk.Div`
-    # NOTE: Can add additional keyword arguments to initializing `wrapper`
-    wrapper_kwargs=dict(
-        item_css={"my-5"},
-        item_attributes=dict(something="else"),
-    ),
-)
-async def receive_form(form: CustomForm = Depends(CustomForm.as_form)):
-    # NOTE: The `form_handler` dependency will handle parsing and unflattening native HTML Forms
-    return [f"{field}: {value}" for field, value in form.model_dump().items()]
+@app.delete("/api/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(task_id: int):
+    """
+    Delete a task.
+    - HTML mode: Element removed by HTMX (hx-swap="delete")
+    - JSON mode: Returns 204 No Content
+    """
+    if task_id not in tasks_db:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    del tasks_db[task_id]
 
 
-class Datapoint(Component):
-    time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    data: float = Field(default_factory=random.random)
-
-
-data: list[Datapoint] = list()
-
-
-@app.get("/dashboard")
-@qk.render_component(html_only=True, template=templates.get_template("Dashboard.html"))
-async def dashboard():
-    return dict(data=data)
-
-
-@app.get("/stream-data")
-# NOTE: Use `streaming=True` to encode the result as a StreamingResponse (using SSE EventSource for HTML)
-@qk.render_component(streaming=True)
-# NOTE: QuikUI handles the conversion to SSE-compatible streaming e.g. `data:{{ html }}\n\n`
-async def stream_live_data() -> "Datapoint":
-    while True:
-        await asyncio.sleep(0.25)
-        pt = Datapoint()
-        data.append(pt)
-        yield pt
+# Streaming Example
 
 
 class Notification(Component):
-    msg: str
+    """
+    A notification message.
+
+    Template:
+    - Notification.html: Toast-style notification
+    """
+
+    message: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-@app.get("/notifications")
+@app.get("/notifications", response_model=None)
 @qk.render_component(streaming=True)
-# NOTE: streaming responses don't have to be endless iterators
-async def notifications() -> "Notification":
-    yield Notification(msg="Wait 5 seconds for a notification")
-    await asyncio.sleep(5.0)
-    yield Notification(msg="Wait another 5 seconds for another")
-    await asyncio.sleep(5.0)
-    yield Notification(msg="No more notifications!")
-    await asyncio.sleep(50.0)
-    yield Notification(msg="Just kidding, htmx-sse auto-reconnects...")
+async def stream_notifications() -> AsyncIterator[Notification]:
+    """
+    Stream notifications using Server-Sent Events.
+    - HTML mode: Streams Notification.html fragments
+    - JSON mode: Streams JSONL (newline-delimited JSON)
+    """
+    import asyncio
+
+    yield Notification(message="Welcome to QuikUI!")
+    await asyncio.sleep(2)
+    yield Notification(message="This is a streaming notification example")
+    await asyncio.sleep(2)
+    yield Notification(message="Notifications appear every 2 seconds")
+    await asyncio.sleep(2)
+    yield Notification(message="This is the last notification")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # Create some sample tasks
+    tasks_db[1] = Task(
+        id=1,
+        title="Learn QuikUI",
+        description="Read the documentation and try the examples",
+        status=TaskStatus.IN_PROGRESS,
+    )
+    tasks_db[2] = Task(
+        id=2,
+        title="Build an HTMX app",
+        description="Use QuikUI with FastAPI and HTMX",
+        status=TaskStatus.TODO,
+    )
+    tasks_db[3] = Task(
+        id=3,
+        title="Deploy to production",
+        description="Share your amazing app with the world",
+        status=TaskStatus.TODO,
+    )
+    next_id = 4
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
