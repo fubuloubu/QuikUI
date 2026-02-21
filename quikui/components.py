@@ -194,42 +194,49 @@ class BaseComponent(BaseModel):
         if include and hasattr(include, "__iter__"):
             include_items = list(include)  # type: ignore[arg-type]
 
+        cls = self.__class__
         model_field_names = set(
             chain(
-                self.model_fields.keys(),
-                self.model_computed_fields.keys(),
+                cls.model_fields.keys(),
+                cls.model_computed_fields.keys(),
                 include_items,
             )
         )
 
         # Also include any public attributes that exist but aren't in model_fields
-        # (e.g., SQLModel relationships)
-        for attr in dir(self):
+        # (e.g., SQLModel relationships which may be descriptors, not in __dict__)
+        # NOTE: We use object.__getattribute__(self, '__dict__') to directly access the
+        # instance dictionary. This bypasses Pydantic's __getattribute__ hook, avoiding
+        # deprecated warnings, and automatically skips all class-level attributes
+        # (ClassVars, methods, etc.) since they aren't in the instance __dict__.
+        instance_dict = object.__getattribute__(self, "__dict__")
+
+        # First, add attributes from instance __dict__ (skips class-level attributes)
+        for attr in instance_dict:
             if (
                 not attr.startswith("_")
                 and attr not in model_field_names
                 and attr not in exclude
-                and not callable(getattr(self, attr, None))
-                and hasattr(self, attr)
             ):
-                # Skip class-level attributes and methods
-                try:
-                    val = getattr(self, attr)
-                    # Only include if it's an instance attribute, not a class var
-                    if not isinstance(
-                        getattr(type(self), attr, None),
-                        (type, classmethod, staticmethod),
-                    ):
-                        model_field_names.add(attr)
-                except (AttributeError, TypeError):
-                    pass
+                val = instance_dict[attr]
+                if not callable(val):
+                    model_field_names.add(attr)
 
-        model_dict = dict(
-            # NOTE: Ensure properties are in original form, not serialized
-            (f, getattr(self, f))
-            for f in model_field_names
-            if f not in exclude and hasattr(self, f)
-        )
+        # Build dict with properties in original form, not serialized
+        model_dict = {}
+        for f in model_field_names:
+            if f not in exclude:
+                if f in instance_dict:
+                    model_dict[f] = instance_dict[f]
+                elif f in cls.model_fields or f in cls.model_computed_fields:
+                    # Use object.__getattribute__ to get computed fields/properties
+                    model_dict[f] = object.__getattribute__(self, f)
+                else:
+                    # May be a descriptor (e.g., SQLModel relationship)
+                    try:
+                        model_dict[f] = object.__getattribute__(self, f)
+                    except AttributeError:
+                        pass
 
         model_dict["__quikui_component_name__"] = (
             self.__quikui_component_name__ or self.__class__.__name__
