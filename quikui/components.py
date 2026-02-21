@@ -73,6 +73,39 @@ class BaseComponent(BaseModel):
     __quikui_component_name__: ClassVar[str | None] = None
     """To override the value of ``__quikui_component_name__`` when rendering the component."""
 
+    def _load_attr(self, attr_name: str) -> Any:
+        """
+        Safely load an attribute value with improved error messages for SQLModel relationships.
+
+        Returns:
+            The attribute value, or None if the attribute doesn't exist.
+
+        Raises:
+            DetachedInstanceError: With an improved error message if a SQLModel relationship
+                cannot be loaded due to a closed session.
+        """
+        try:
+            return object.__getattribute__(self, attr_name)
+        except AttributeError:
+            return None  # Attribute doesn't exist
+        except Exception as e:
+            # Catch SQLAlchemy DetachedInstanceError and provide helpful message
+            if "DetachedInstanceError" in type(e).__name__:
+                cls = self.__class__
+                raise type(e)(
+                    f"{e}\n\n"
+                    f"QuikUI hint: The relationship '{attr_name}' on {cls.__name__} "
+                    f"could not be loaded because the SQLAlchemy session is closed. "
+                    f"To fix this, eager-load the relationship using selectinload or joinedload:\n\n"
+                    f"  from sqlalchemy.orm import selectinload\n"
+                    f"  from sqlmodel import select\n\n"
+                    f"  # Query with eager loading:\n"
+                    f"  items = session.exec(\n"
+                    f"      select({cls.__name__}).options(selectinload({cls.__name__}.{attr_name}))\n"
+                    f"  ).all()\n"
+                ) from None
+            raise
+
     @classmethod
     @cache
     def quikui_environment(cls) -> Environment:
@@ -225,14 +258,37 @@ class BaseComponent(BaseModel):
                 if f in instance_dict:
                     model_dict[f] = instance_dict[f]
                 elif f in cls.model_fields or f in cls.model_computed_fields:
-                    # Use object.__getattribute__ to get computed fields/properties
-                    model_dict[f] = object.__getattribute__(self, f)
+                    model_dict[f] = self._load_attr(f)
                 else:
                     # May be a descriptor (e.g., SQLModel relationship)
-                    try:
-                        model_dict[f] = object.__getattribute__(self, f)
-                    except AttributeError:
-                        pass
+                    val = self._load_attr(f)
+                    if val is not None:
+                        model_dict[f] = val
+
+        # Also include any public attributes from instance __dict__ that aren't in model_fields
+        # (e.g., SQLModel relationships that have been eager-loaded)
+        for attr in instance_dict:
+            if not attr.startswith("_") and attr not in model_dict and attr not in exclude:
+                val = instance_dict[attr]
+                if not callable(val):
+                    model_dict[attr] = val
+
+        # Check for class-level descriptors (e.g., SQLModel relationships via InstrumentedAttribute)
+        # that haven't been loaded into instance_dict yet
+        for attr_name in cls.__dict__:
+            if (
+                not attr_name.startswith("_")
+                and attr_name not in model_dict
+                and attr_name not in exclude
+                and attr_name not in cls.model_fields
+                and attr_name not in cls.model_computed_fields
+            ):
+                attr_value = cls.__dict__[attr_name]
+                # Check if it's a descriptor (has __get__ method)
+                if hasattr(attr_value, "__get__"):
+                    val = self._load_attr(attr_name)
+                    if val is not None and not callable(val):
+                        model_dict[attr_name] = val
 
         model_dict["__quikui_component_name__"] = (
             self.__quikui_component_name__ or self.__class__.__name__
