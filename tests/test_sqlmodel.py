@@ -219,6 +219,7 @@ def test_sqlmodel_detached_instance_error():
     # Query without eager loading and close session
     with Session(engine) as session:
         task = session.get(Task, task_id)
+        assert task is not None
 
     # Now session is closed - should raise DetachedInstanceError with helpful message
     with pytest.raises(DetachedInstanceError) as exc_info:
@@ -285,8 +286,9 @@ def test_sqlmodel_eager_loaded_relationships():
     # Query WITH eager loading
     with Session(engine) as session:
         book = session.exec(
-            select(Book).where(Book.id == book_id).options(selectinload(Book.author))
+            select(Book).where(Book.id == book_id).options(selectinload(Book.author))  # type: ignore[arg-type]
         ).first()
+        assert book is not None
         # Verify author is in __dict__ after eager loading
         assert "author" in book.__dict__
 

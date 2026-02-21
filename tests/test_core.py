@@ -296,7 +296,7 @@ def test_wrapper_with_list_response():
 
         def __init__(self, *tasks, **data):
             # Store tasks (BaseComponent instances) as a regular field
-            super().__init__(items=list(tasks), **data)
+            super().__init__(**{"items": list(tasks), **data})
 
         @classmethod
         @cache

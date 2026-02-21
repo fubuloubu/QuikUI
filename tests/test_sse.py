@@ -116,11 +116,11 @@ def test_event_stream_invalid_items():
 
     # Not a generator
     with pytest.raises(ValueError, match="must be `aiter` or `iter`"):
-        EventStream(["not", "a", "generator"])
+        EventStream(["not", "a", "generator"])  # type: ignore[arg-type]
 
     # Also not a generator
     with pytest.raises(ValueError, match="must be `aiter` or `iter`"):
-        EventStream("not a generator")
+        EventStream("not a generator")  # type: ignore[arg-type]
 
 
 def test_event_stream_aiter():
