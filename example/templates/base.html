@@ -4,17 +4,81 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}QuikUI Example{% endblock %}</title>
-    
+
     {# TailwindCSS for styling #}
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     {# HTMX for interactivity #}
     <script src="https://unpkg.com/htmx.org@2.0.0"></script>
     <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
-    
+
     {# Alpine.js for client-side state #}
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    
+
+    {# Configure HTMX to handle error responses #}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.body.addEventListener('htmx:beforeSwap', function(evt) {
+                // Allow swapping on 4xx and 5xx responses when server sends HX-Retarget
+                if (evt.detail.xhr.status >= 400 && evt.detail.xhr.status < 600) {
+                    const retargetHeader = evt.detail.xhr.getResponseHeader('HX-Retarget');
+                    const reswapHeader = evt.detail.xhr.getResponseHeader('HX-Reswap');
+
+                    if (retargetHeader) {
+                        // Handle "closest" selector manually since HTMX's native closest has issues
+                        if (retargetHeader.startsWith('closest ')) {
+                            const selector = retargetHeader.substring(8); // Remove "closest "
+
+                            // In HTMX 2.0, evt.detail.elt is the triggering element
+                            const triggeringElt = evt.detail.elt || evt.target;
+
+                            if (triggeringElt) {
+                                let errorContainer = null;
+
+                                // Strategy 1: Search ancestors (true "closest")
+                                errorContainer = triggeringElt.closest(selector);
+
+                                // Strategy 2: Search siblings (for form next to error container)
+                                if (!errorContainer) {
+                                    let parent = triggeringElt.parentElement;
+                                    while (parent && !errorContainer) {
+                                        errorContainer = parent.querySelector(selector);
+                                        if (!errorContainer) {
+                                            parent = parent.parentElement;
+                                        }
+                                    }
+                                }
+
+                                // Strategy 3: Last resort - search entire document
+                                if (!errorContainer) {
+                                    errorContainer = document.querySelector(selector);
+                                }
+
+                                if (errorContainer) {
+                                    evt.detail.target = errorContainer;
+                                }
+                            }
+                        } else {
+                            // Direct selector (like #toast-container)
+                            const targetElt = document.querySelector(retargetHeader);
+                            if (targetElt) {
+                                evt.detail.target = targetElt;
+                            }
+                        }
+
+                        // Apply reswap if provided
+                        if (reswapHeader) {
+                            evt.detail.swapOverride = reswapHeader;
+                        }
+
+                        evt.detail.shouldSwap = true;
+                        evt.detail.isError = false;
+                    }
+                }
+            });
+        });
+    </script>
+
     {% block head %}{% endblock %}
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -34,15 +98,10 @@
         {% block content %}{% endblock %}
     </main>
 
-    {# Toast notification container (SSE disabled by default - uncomment to enable) #}
-    <div id="toast-container" 
-         class="fixed top-4 right-4 space-y-2 z-50">
-         {# Uncomment to enable live notifications via SSE:
-         hx-ext="sse"
-         sse-connect="/notifications"
-         sse-swap="message"
-         hx-swap="beforeend"
-         #}
+    {# Toast notification container for global errors and notifications #}
+    <div id="toast-container"
+         class="quikui-error-container fixed top-4 right-4 space-y-2 z-50 max-w-md">
+         {# Errors from delete operations will appear here as toasts #}
     </div>
 
     {% block scripts %}{% endblock %}

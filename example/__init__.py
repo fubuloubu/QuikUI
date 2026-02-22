@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from fastapi import FastAPI, Form, HTTPException, status
-from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import Field
 
@@ -26,9 +25,47 @@ import quikui as qk
 
 app = FastAPI(title="QuikUI Example")
 
-# Setup templates
+# Setup templates (for full page rendering and our custom errors)
 templates = Jinja2Templates(directory="example/templates")
-qk.register_filters(templates.env)
+
+# Setup HTMX-friendly error handlers with custom template environment
+# NOTE: Add `template_env=` to define your own basic templates,
+#       or use `TemplatedHttpException` to define advanced custom exceptions
+qk.setup_error_handlers(app, template_env=templates.env)
+
+
+# Custom templated exceptions
+class TaskInProgressError(qk.TemplatedHTTPException):
+    """Custom exception for attempting to delete in-progress tasks."""
+
+    quikui_template_package_name = "example"
+    error_container = "#toast-container"  # Show as toast notification
+    error_swap = "beforeend"  # Append to toast container
+    template_variant = "toast"  # Use the toast template variant
+
+    def __init__(self, task_title: str, task_id: int):
+        super().__init__(
+            status_code=409,
+            detail=f"Cannot delete task '{task_title}' while in progress",
+        )
+        self.task_title = task_title
+        self.task_id = task_id
+
+
+class InvalidTitleError(qk.TemplatedHTTPException):
+    """Custom exception for invalid task titles."""
+
+    quikui_template_package_name = "example"
+    error_container = "closest .quikui-error-container"  # Show near the form
+    error_swap = "innerHTML"  # Replace container content
+
+    def __init__(self, title: str, reason: str):
+        super().__init__(
+            status_code=400,
+            detail=f"Invalid task title: {title}",
+        )
+        self.title = title
+        self.reason = reason
 
 
 # Base Component
@@ -76,11 +113,6 @@ next_id = 1
 
 
 @app.get("/", include_in_schema=False)
-async def redirect_to_home():
-    return RedirectResponse("/tasks")
-
-
-@app.get("/tasks", include_in_schema=False)
 @qk.render_component(html_only=True, template="tasks.html", env=templates)
 def tasks_page():
     """Main page showing all tasks."""
@@ -115,15 +147,27 @@ def get_task(task_id: int) -> Task:
 @app.post("/api/tasks", status_code=status.HTTP_201_CREATED)
 @qk.render_component()
 def create_task(
-    title: str = Form(...),
-    description: str = Form(""),
+    title: str = Form(..., min_length=1, max_length=32),
+    description: str = Form("", max_length=64),
     status_value: str = Form(TaskStatus.TODO.value),
 ) -> Task:
     """
     Create a new task.
     - HTML mode: Returns table row to prepend to list (using Task.table.html via header)
     - JSON mode: Returns created task object
+
+    Demo error handling:
+    - Title "error" triggers a custom 400 error with InvalidTitleError template
+    - Description > 64 chars triggers Pydantic validation error (RequestValidationError)
+    - Empty title or title > 32 chars triggers standard validation error
     """
+    # Demo: trigger custom templated error for demonstration purposes
+    if title.lower() == "error":
+        raise InvalidTitleError(
+            title=title,
+            reason="The word 'error' is reserved for testing. Try a different title!",
+        )
+
     global next_id
     task = Task(
         id=next_id,
@@ -171,9 +215,17 @@ def delete_task(task_id: int):
     Delete a task.
     - HTML mode: Automatically converted to 200 OK with empty string for htmx compatibility
     - JSON mode: Returns 204 No Content
+
+    Demo: Cannot delete tasks that are In Progress
     """
     if task_id not in tasks_db:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    task = tasks_db[task_id]
+
+    # Demo: Prevent deleting in-progress tasks with custom templated error
+    if task.status == TaskStatus.IN_PROGRESS:
+        raise TaskInProgressError(task_title=task.title, task_id=task.id)
 
     del tasks_db[task_id]
 

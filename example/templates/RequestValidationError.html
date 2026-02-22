@@ -1,0 +1,14 @@
+<div
+  class="quikui-error-container mb-4 p-3 rounded text-sm bg-red-50 border border-red-300 text-red-800"
+>
+  <strong class="block mb-2">❌ Validation Error</strong>
+  <p class="mb-2">Please fix the following errors:</p>
+  <ul class="list-disc list-inside text-sm">
+    {% for error in errors %}
+    <li>
+      {% if error.loc %}<strong>{{ error.loc|join('.') }}:</strong> {% endif %}
+      {{ error.msg }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>

@@ -1,14 +1,12 @@
 from collections.abc import Container
-from functools import cache
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, ClassVar
 
 from jinja2 import Environment, PackageLoader, Template
 from jinja2 import TemplateNotFound as Jinja2TemplateNotFound
 from pydantic import BaseModel
+
+from quikui.jinja import render_component_variant
 
 from .exceptions import NoTemplateFoundError
 
@@ -107,7 +105,6 @@ class BaseComponent(BaseModel):
             raise
 
     @classmethod
-    @cache
     def quikui_environment(cls) -> Environment:
         """
         The environment to search for templates for this class and all it's subclasses.
@@ -115,11 +112,8 @@ class BaseComponent(BaseModel):
         Returns:
             :class:`~jinja2.Environment`:
                 The environment to search for template(s) to render this class with.
-
-        ```{note}
-        This method is cached since environments will typically not change during runtime.
-        ```
         """
+
         env = Environment(
             loader=PackageLoader(
                 package_name=cls.quikui_template_package_name,
@@ -128,7 +122,12 @@ class BaseComponent(BaseModel):
             autoescape=True,
         )
         # NOTE: Add our special filters here
-        env.filters.update({"is_component": is_component})
+        env.filters.update(
+            {
+                "is_component": is_component,
+                "variant": render_component_variant,
+            }
+        )
         return env
 
     @classmethod
