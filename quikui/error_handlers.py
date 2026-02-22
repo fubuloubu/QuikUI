@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from jinja2 import Environment, TemplateNotFound
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 
 # Global template environment for error rendering
 _error_template_env: Environment | None = None
@@ -118,9 +119,7 @@ def _create_htmx_error_response(
     )
 
 
-async def http_exception_handler(
-    request: Request, exc: StarletteHTTPException
-) -> JSONResponse | HTMLResponse:
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> Response:
     """
     Handle HTTPException for both HTML and JSON requests.
 
@@ -174,9 +173,7 @@ async def http_exception_handler(
     )
 
 
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse | HTMLResponse:
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> Response:
     """
     Handle Pydantic RequestValidationError (422 errors) for both HTML and JSON requests.
 
@@ -288,8 +285,8 @@ def setup_error_handlers(
     _error_template_env = template_env
 
     # Register exception handlers
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
 
 
 __all__ = [
