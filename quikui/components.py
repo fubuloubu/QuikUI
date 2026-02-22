@@ -6,14 +6,8 @@ from jinja2 import Environment, PackageLoader, Template
 from jinja2 import TemplateNotFound as Jinja2TemplateNotFound
 from pydantic import BaseModel
 
-from quikui.jinja import render_component_variant
-
 from .exceptions import NoTemplateFoundError
-
-
-def is_component(value: Any) -> bool:
-    """Helper function to check if a value is a BaseComponent instance."""
-    return isinstance(value, BaseComponent)
+from .jinja import register_filters
 
 
 class BaseComponent(BaseModel):
@@ -122,12 +116,7 @@ class BaseComponent(BaseModel):
             autoescape=True,
         )
         # NOTE: Add our special filters here
-        env.filters.update(
-            {
-                "is_component": is_component,
-                "variant": render_component_variant,
-            }
-        )
+        register_filters(env)
         return env
 
     @classmethod

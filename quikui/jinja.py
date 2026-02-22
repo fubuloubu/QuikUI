@@ -7,6 +7,8 @@ from markupsafe import Markup
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from jinja2.environment import Environment
+
     from .components import BaseComponent
 
 # Context variable to store the current template context provider
@@ -81,6 +83,13 @@ def get_template_context() -> dict[str, Any]:
     return provider()
 
 
+def is_component(value: Any) -> bool:
+    """Helper function to check if a value is a BaseComponent instance."""
+    from .components import BaseComponent
+
+    return isinstance(value, BaseComponent)
+
+
 def render_component_variant(
     component_or_list: "BaseComponent | Iterable[BaseComponent]",
     variant: str,
@@ -103,6 +112,7 @@ def render_component_variant(
         {{ complaints|variant("table") }}  # Renders all complaints as table rows
     """
 
+    # TODO: `ty` doesn't properly handle using `is_component` yet for this
     from .components import BaseComponent
 
     # Single component
@@ -114,3 +124,27 @@ def render_component_variant(
             component.model_dump_html(template_variant=variant) for component in component_or_list
         )
     )
+
+
+def register_filters(env: "Environment"):
+    """
+    Register QuikUI Jinja2 filters on a Jinja2 Environment.
+
+    This adds the following filters:
+    - variant: Render a component with an optional variant
+
+    Usage with FastAPI:
+        from fastapi.templating import Jinja2Templates
+        import quikui as qk
+
+        templates = Jinja2Templates(directory="templates")
+        qk.register_filters(templates.env)
+
+        # In templates:
+        {{ component|variant("table") }}
+
+    Args:
+        env: A Jinja2 Environment instance
+    """
+    env.filters["is_component"] = is_component
+    env.filters["variant"] = render_component_variant
