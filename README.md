@@ -14,6 +14,7 @@ It's built specifically for modern web applications using FastAPI and HTMX, enab
 - **🔒 Safe by Default**: Automatic HTML escaping through Jinja2's autoescape
 - **📡 SSE Streaming**: Built-in support for Server-Sent Events streaming
 - **🎭 Smart Detection**: Automatic HTML vs JSON response based on request headers
+- **⚠️ HTMX Error Handling**: Automatic error handling with native HTMX retargeting for validation errors and exceptions
 
 ## Installation
 
@@ -140,13 +141,16 @@ def delete_task(task_id: int):
 ```
 
 **Behavior:**
+
 - **JSON clients**: `204 No Content` (standard REST)
 - **HTML/HTMX clients**: `200 OK` with empty string (enables element removal)
 
 ```html
-<button hx-delete="/api/tasks/{{ id }}"
-        hx-target="#task-{{ id }}"
-        hx-swap="outerHTML">
+<button
+  hx-delete="/api/tasks/{{ id }}"
+  hx-target="#task-{{ id }}"
+  hx-swap="outerHTML"
+>
   Delete
 </button>
 ```
@@ -265,6 +269,130 @@ Now all templates have access to `current_user` and `app_version`.
 
 ## Advanced Usage
 
+### HTMX-Friendly Error Handling
+
+QuikUI provides automatic error handling that works seamlessly with HTMX.
+When errors occur (validation errors, 404s, etc.), QuikUI automatically detects whether the request is from HTMX or a JSON client and responds appropriately.
+
+**Basic Setup (with built-in templates):**
+
+```python
+from fastapi import FastAPI
+import quikui as qk
+
+app = FastAPI()
+
+# Use QuikUI's minimal built-in error templates
+qk.setup_error_handlers(app)
+```
+
+**Custom Templates (to style your own):**
+
+```python
+from fastapi import FastAPI
+from fastapi.templating import Jinja2Templates
+import quikui as qk
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+# Use your own error templates
+qk.setup_error_handlers(app, template_env=templates.env)
+```
+
+**Template Lookup Strategy:**
+
+1. **TemplatedHTTPException** → Uses exception's own template with custom HTMX targeting
+2. **HTTPException** → Tries `HTTPException.html` from your templates, then our basic one
+3. **RequestValidationError** → Tries `RequestValidationError.html` from your templates, then our basic one
+4. **Fallback** → If no templates found, simply falls back to FastAPI's own error strategy
+
+**Creating Custom Error Templates (for basic FastAPI exceptions):**
+
+Create `templates/HTTPException.html`:
+
+```html
+<div class="alert alert-danger">
+  <strong>{{ status_text }}</strong>
+  <p>{{ detail }}</p>
+</div>
+```
+
+Create `templates/RequestValidationError.html`:
+
+```html
+<div class="alert alert-warning">
+  <strong>Validation Error</strong>
+  <ul>
+    {% for error in errors %}
+    <li><strong>{{ error.loc|join('.') }}:</strong> {{ error.msg }}</li>
+    {% endfor %}
+  </ul>
+</div>
+```
+
+**HTMX Configuration (Required):**
+
+By default, HTMX doesn't swap content on 4xx responses.
+See https://htmx.org/docs/#response-handling for more information on how to set it up.
+
+**In your HTML template:**
+
+```html
+<!-- Error container where errors will be displayed -->
+<div id="error-container"></div>
+
+<!-- Your form -->
+<form hx-post="/api/tasks" hx-target="#task-list">
+  <input name="title" required />
+  <button type="submit">Create</button>
+</form>
+```
+
+**Custom Exceptions with HTMX Targeting:**
+
+For advanced use cases, create custom exceptions that control exactly where and how errors appear:
+
+```python
+class TaskInProgressError(qk.TemplatedHTTPException):
+    """Custom exception with toast notification."""
+
+    quikui_template_package_name = "myapp"
+    error_container = "#toast-container"  # Where to display
+    error_swap = "beforeend"              # How to insert
+    template_variant = "toast"            # Which template variant
+
+    def __init__(self, task_title: str):
+        super().__init__(
+            status_code=409,
+            detail=f"Cannot delete '{task_title}' while in progress"
+        )
+        self.task_title = task_title
+
+# Then create templates/TaskInProgressError.toast.html
+```
+
+**How it works:**
+
+- **HTML/HTMX requests**: Returns rendered templates with optional `HX-Retarget` and `HX-Reswap` headers
+- **JSON requests**: Returns standard FastAPI JSON error responses
+- **Handles all FastAPI errors**: HTTPException (404, 403, etc.), RequestValidationError (422), and TemplatedHTTPException
+
+**Example with validation:**
+
+```python
+@app.post("/api/tasks")
+@qk.render_component()
+def create_task(
+    title: str = Form(..., min_length=1, max_length=200),
+    description: str = Form(""),
+) -> Task:
+    # Validation happens automatically
+    # Errors use your RequestValidationError.html template for HTMX
+    # JSON clients get standard 422 response
+    return Task(title=title, description=description)
+```
+
 ### Custom Template Package
 
 Override where QuikUI looks for templates:
@@ -277,7 +405,7 @@ class Component(qk.BaseComponent):
 
 ### HTML-Only Routes
 
-Force routes to only accept HTML requests:
+Force routes to only accept HTML requests (useful for rendering full pages):
 
 ```python
 @app.get("/dashboard")
@@ -320,7 +448,7 @@ The `example/` directory contains a complete task management application demonst
 - ✅ Template variants for different contexts
 - ✅ Inline editing with Alpine.js
 - ✅ Server-sent events for notifications
-- ✅ Form validation
+- ✅ Form validation with HTMX-friendly error handling
 - ✅ Production-ready patterns
 
 Run the example:

@@ -7,39 +7,51 @@
     {# Create Task Form #}
     <div class="p-6 border-b border-gray-200">
         <h2 class="text-lg font-semibold mb-4">Create New Task</h2>
+
+        {# Demo note for error handling - errors will replace this entire box #}
+        <div class="quikui-error-container mb-4 p-3 rounded text-sm bg-blue-50 border border-blue-200 text-blue-800">
+            <strong>Try the error handling:</strong>
+            <ul class="list-disc list-inside mt-1">
+                <li>Leave title empty to see a standard validation error</li>
+                <li>Enter "error" as title to see a custom templated error</li>
+                <li>Enter a description > 64 characters to see a Pydantic validation error</li>
+                <li>Try to delete an "In Progress" task to see a toast notification</li>
+            </ul>
+        </div>
+
         <form hx-post="/api/tasks"
               hx-target="#tasks-tbody"
               hx-swap="afterbegin"
-              hx-on::after-request="this.reset()"
+              hx-on::after-request="if(event.detail.successful && event.detail.xhr.status >= 200 && event.detail.xhr.status < 300) { this.reset(); const container = this.closest('.p-6').querySelector('.quikui-error-container'); if (container) { container.outerHTML = '<div class=&quot;quikui-error-container mb-4 p-3 rounded text-sm bg-blue-50 border border-blue-200 text-blue-800&quot;><strong>Try the error handling:</strong><ul class=&quot;list-disc list-inside mt-1&quot;><li>Leave title empty to see a standard validation error</li><li>Enter &quot;error&quot; as title to see a custom templated error</li><li>Enter a description &gt; 64 characters to see a Pydantic validation error</li><li>Try to delete an &quot;In Progress&quot; task to see a toast notification</li></ul></div>'; } }"
               hx-headers='{"Qk-Variant": "table"}'
               class="space-y-4">
-            
+
             <div>
                 <label for="title" class="block text-sm font-medium text-gray-700 mb-1">
                     Title
                 </label>
-                <input type="text" 
-                       id="title" 
-                       name="title" 
+                <input type="text"
+                       id="title"
+                       name="title"
                        required
                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
-            
+
             <div>
                 <label for="description" class="block text-sm font-medium text-gray-700 mb-1">
                     Description
                 </label>
-                <textarea id="description" 
-                          name="description" 
+                <textarea id="description"
+                          name="description"
                           rows="3"
                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
             </div>
-            
+
             <div>
                 <label for="status_value" class="block text-sm font-medium text-gray-700 mb-1">
                     Status
                 </label>
-                <select id="status_value" 
+                <select id="status_value"
                         name="status_value"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {% for status in statuses %}
@@ -47,7 +59,7 @@
                     {% endfor %}
                 </select>
             </div>
-            
+
             <button type="submit"
                     class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 Create Task

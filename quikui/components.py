@@ -118,14 +118,20 @@ class BaseComponent(BaseModel):
 
         ```{note}
         This method is cached since environments will typically not change during runtime.
+        To disable template caching during development, set the environment variable:
+        ``QUIKUI_DEV_MODE=1`` or call ``quikui_environment.cache_clear()``
         ```
         """
+        import os
+
         env = Environment(
             loader=PackageLoader(
                 package_name=cls.quikui_template_package_name,
                 package_path=cls.quikui_template_package_path,
             ),
             autoescape=True,
+            # Disable template caching in dev mode
+            auto_reload=os.getenv("QUIKUI_DEV_MODE") == "1",
         )
         # NOTE: Add our special filters here
         env.filters.update({"is_component": is_component})

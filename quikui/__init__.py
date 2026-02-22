@@ -1,7 +1,13 @@
 from .components import BaseComponent, is_component
 from .decorators import render_component
 from .dependencies import QkVariant, RequestIfHtmlResponseNeeded
-from .exceptions import HtmlResponseOnlyError, NoTemplateFoundError, ResponseNotRenderableError
+from .error_handlers import setup_error_handlers
+from .exceptions import (
+    HtmlResponseOnlyError,
+    NoTemplateFoundError,
+    ResponseNotRenderableError,
+    TemplatedHTTPException,
+)
 from .jinja import (
     get_template_context,
     register_filters,
@@ -22,4 +28,6 @@ __all__ = [
     "HtmlResponseOnlyError",
     "NoTemplateFoundError",
     "ResponseNotRenderableError",
+    "TemplatedHTTPException",
+    "setup_error_handlers",
 ]

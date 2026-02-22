@@ -1,0 +1,12 @@
+<div class="quikui-validation-error">
+  <strong>Validation Error</strong>
+  <p>Please fix the following errors:</p>
+  <ul>
+    {% for error in errors %}
+    <li>
+        {% if error.loc %}<strong>{{ error.loc|join('.') }}:</strong> {% endif %}
+        {{ error.msg }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
