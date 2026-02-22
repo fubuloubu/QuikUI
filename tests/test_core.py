@@ -23,7 +23,6 @@ def app():
         "Task.table.html": "<tr><td>{{ title }}</td><td>{{ status.value }}</td></tr>",
     }
     env = Environment(loader=DictLoader(templates))
-    qk.register_filters(env)
 
     class Task(qk.BaseComponent):
         id: int
@@ -140,7 +139,6 @@ def test_html_only_error_without_html_accept():
         @cache
         def quikui_environment(cls) -> Environment:
             env = Environment(loader=DictLoader({"Item.html": "<div>{{ name }}</div>"}))
-            qk.register_filters(env)
             return env
 
     @app.get("/html-only")
@@ -166,7 +164,6 @@ async def test_streaming_html_responses():
         @cache
         def quikui_environment(cls) -> Environment:
             env = Environment(loader=DictLoader({"Task.html": "<div>{{ title }}</div>"}))
-            qk.register_filters(env)
             return env
 
     @app.get("/tasks/stream")
@@ -199,7 +196,6 @@ def test_streaming_sync_generator_html():
         @cache
         def quikui_environment(cls) -> Environment:
             env = Environment(loader=DictLoader({"Task.html": "<div>{{ title }}</div>"}))
-            qk.register_filters(env)
             return env
 
     @app.get("/tasks/stream-sync")
@@ -287,7 +283,6 @@ def test_wrapper_with_list_response():
             env = Environment(
                 loader=DictLoader({"Task.html": "<div>{{ title }}</div>"}), autoescape=True
             )
-            qk.register_filters(env)
             return env
 
     class TaskList(qk.BaseComponent):
@@ -310,7 +305,6 @@ def test_wrapper_with_list_response():
                 ),
                 autoescape=True,
             )
-            qk.register_filters(env)
             return env
 
     @app.get("/tasks-wrapped")
@@ -340,7 +334,6 @@ def test_component_html_method():
         @cache
         def quikui_environment(cls) -> Environment:
             env = Environment(loader=DictLoader({"Task.html": "<div>{{ title }}</div>"}))
-            qk.register_filters(env)
             return env
 
     task = Task(title="Test Task")
@@ -375,7 +368,6 @@ def test_template_variant_rendering():
                     }
                 )
             )
-            qk.register_filters(env)
             return env
 
     task = Task(title="Test Task", description="A test task")

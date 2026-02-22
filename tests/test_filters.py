@@ -13,7 +13,6 @@ def env():
         "Widget.card.html": '<div class="card">{{ name }}</div>',
     }
     env = Environment(loader=DictLoader(templates))
-    qk.register_filters(env)
     return env
 
 

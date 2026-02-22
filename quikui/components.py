@@ -3,6 +3,8 @@ from functools import cache
 from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from quikui.jinja import render_component_variant
+
 if TYPE_CHECKING:
     pass
 
@@ -134,7 +136,12 @@ class BaseComponent(BaseModel):
             auto_reload=os.getenv("QUIKUI_DEV_MODE") == "1",
         )
         # NOTE: Add our special filters here
-        env.filters.update({"is_component": is_component})
+        env.filters.update(
+            {
+                "is_component": is_component,
+                "variant": render_component_variant,
+            }
+        )
         return env
 
     @classmethod

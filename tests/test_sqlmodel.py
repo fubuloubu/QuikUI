@@ -30,7 +30,6 @@ def env():
         "Account.html": "<div>{{ username }}</div>",
     }
     env = Environment(loader=DictLoader(templates))
-    qk.register_filters(env)
     return env
 
 
@@ -67,7 +66,6 @@ def test_sqlmodel_relationships(session):
             }
         )
     )
-    qk.register_filters(env)
 
     class Owner(qk.BaseComponent, SQLModel, table=True):
         id: int | None = Field(default=None, primary_key=True)
@@ -138,7 +136,6 @@ def test_sqlmodel_computed_fields(session):
             }
         )
     )
-    qk.register_filters(env_local)
 
     class Profile(qk.BaseComponent, SQLModel, table=True):
         id: int | None = Field(default=None, primary_key=True)
@@ -178,7 +175,6 @@ def test_sqlmodel_detached_instance_error():
             }
         )
     )
-    qk.register_filters(env)
 
     class Company(qk.BaseComponent, SQLModel, table=True):
         id: int | None = Field(default=None, primary_key=True)
@@ -245,7 +241,6 @@ def test_sqlmodel_eager_loaded_relationships():
             }
         )
     )
-    qk.register_filters(env)
 
     class Author(qk.BaseComponent, SQLModel, table=True):
         id: int | None = Field(default=None, primary_key=True)
@@ -308,7 +303,6 @@ def test_sqlmodel_relationship_in_instance_dict():
             }
         )
     )
-    qk.register_filters(env)
 
     class Customer(qk.BaseComponent, SQLModel, table=True):
         id: int | None = Field(default=None, primary_key=True)

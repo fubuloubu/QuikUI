@@ -7,8 +7,6 @@ from markupsafe import Markup
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from jinja2 import Environment
-
     from .components import BaseComponent
 
 # Context variable to store the current template context provider
@@ -116,26 +114,3 @@ def render_component_variant(
             component.model_dump_html(template_variant=variant) for component in component_or_list
         )
     )
-
-
-def register_filters(env: "Environment"):
-    """
-    Register QuikUI Jinja2 filters on a Jinja2 Environment.
-
-    This adds the following filters:
-    - variant: Render a component with an optional variant
-
-    Usage with FastAPI:
-        from fastapi.templating import Jinja2Templates
-        import quikui as qk
-
-        templates = Jinja2Templates(directory="templates")
-        qk.register_filters(templates.env)
-
-        # In templates:
-        {{ component|variant("table") }}
-
-    Args:
-        env: A Jinja2 Environment instance
-    """
-    env.filters["variant"] = render_component_variant

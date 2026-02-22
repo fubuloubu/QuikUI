@@ -10,7 +10,6 @@ from .exceptions import (
 )
 from .jinja import (
     get_template_context,
-    register_filters,
     render_component_variant,
     set_context_provider,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "render_component",
     "QkVariant",
     "RequestIfHtmlResponseNeeded",
-    "register_filters",
     "render_component_variant",
     "set_context_provider",
     "get_template_context",
