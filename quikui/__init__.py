@@ -1,4 +1,4 @@
-from .components import BaseComponent, is_component
+from .components import BaseComponent
 from .decorators import render_component
 from .dependencies import QkVariant, RequestIfHtmlResponseNeeded
 from .error_handlers import setup_error_handlers
@@ -10,6 +10,8 @@ from .exceptions import (
 )
 from .jinja import (
     get_template_context,
+    is_component,
+    register_filters,
     render_component_variant,
     set_context_provider,
 )
@@ -27,5 +29,6 @@ __all__ = [
     "NoTemplateFoundError",
     "ResponseNotRenderableError",
     "TemplatedHTTPException",
+    "register_filters",
     "setup_error_handlers",
 ]

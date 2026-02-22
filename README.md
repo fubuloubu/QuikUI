@@ -122,6 +122,17 @@ Use the `Qk-Variant` header to specify which template variant to render:
 
 The `|variant("table")` filter renders each task using `Task.table.html`.
 
+**IMPORTANT**
+
+If creating your own template environment (such as with FastAPI templating feature),
+use `register_filters` to register our filters (like `variant`) into your templates.
+
+```py
+from fastapi.templating import Jinja2Templates
+templates = Jinja2Templates(directory="myapp/templates")
+qk.register_filters(templates.env)
+```
+
 #### DELETE Requests with HTMX
 
 QuikUI automatically handles DELETE operations for both REST and HTMX clients:
