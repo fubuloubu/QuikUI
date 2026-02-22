@@ -78,18 +78,12 @@ import quikui as qk
 
 app = FastAPI()
 
-# Register QuikUI filters for template variants
-from fastapi.templating import Jinja2Templates
-templates = Jinja2Templates(directory="myapp/templates")
-qk.register_filters(templates.env)
-
 @app.get("/tasks/{task_id}")
 @qk.render_component()
-def get_task(task_id: int) -> Task:
-    task = session.get(Task, task_id)
-    # Returns HTML when browser requests it
-    # Returns JSON when API client requests it
-    return task
+def get_task(task_id: int, session: Session = Depends(...)) -> Task:
+    return session.get(Task, task_id)
+    # Returns HTML when a browser client requests it
+    # Falls back to FastAPI JSONResponse when API client requests it
 ```
 
 ## Core Concepts
@@ -120,7 +114,7 @@ Use the `Qk-Variant` header to specify which template variant to render:
   <button type="submit">Create</button>
 </form>
 
-<!-- Table that displays tasks -->
+<!-- Table in a template that displays tasks -->
 <tbody id="tasks-tbody">
   {% for task in tasks %} {{ task|variant("table") }} {% endfor %}
 </tbody>
@@ -143,7 +137,7 @@ def delete_task(task_id: int):
 **Behavior:**
 
 - **JSON clients**: `204 No Content` (standard REST)
-- **HTML/HTMX clients**: `200 OK` with empty string (enables element removal)
+- **HTML/HTMX clients**: `200 OK` with empty string (enables element removal via HTMX)
 
 ```html
 <button
@@ -166,7 +160,7 @@ class Task(Component):
     created_at: datetime
     tags: list[str]  # Complex types work too
 
-    @computed_field
+    @computed_field  # Any computed fields are added
     @property
     def display_name(self) -> str:
         return f"Task: {self.title}"
@@ -218,9 +212,13 @@ In `User.html`:
 ```
 
 ```{caution}
-When using with SQLModel's lazy-loading relationship attributes, please use a sync db driver.
-An async driver will not work and will cause async handling errors!
-Jinja2 templating cannot work in an asynchronous context.
+When using with SQLModel's lazy-loading relationship attributes, please do not use an async driver.
+An async driver will not work and will cause async handling errors when attempting to render!
+
+Jinja2 templating cannot work in an asynchronous context, so only synchronous rendering of async fields will work.
+Alternatively, use `selectinload` or another method to eagerly load lazy relationship attributes that you need.
+
+See: https://docs.sqlalchemy.org/en/14/orm/loading_relationships.html
 ```
 
 ### Streaming with SSE
